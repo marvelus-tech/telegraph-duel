@@ -80,9 +80,77 @@ eventBus.on('match:start', (event) => {
 
 See [`EVENTBUS.md`](./EVENTBUS.md) for payload shapes and ordering guarantees.
 
-### Multi-Agent Seats
+### Multi-Agent Match Rooms
 
-See [`SEATS.md`](./SEATS.md) for HTTP + WebSocket match-room design enabling two separate agent processes to play against each other.
+**Status: Implemented (spike)** - See [`SEATS.md`](./SEATS.md) for design spec.
+
+The match server enables two separate agent processes to play against each other over the network via HTTP + WebSocket.
+
+#### Quick Start
+
+1. **Start the match server** (local dev):
+   ```bash
+   cd packages/match-server
+   npm install
+   npm run dev
+   # Server runs at http://localhost:8787
+   ```
+
+2. **Create a room**:
+   ```bash
+   curl -X POST http://localhost:8787/rooms
+   # Returns: {"roomId":"rm_abc123","status":"waiting",...}
+   ```
+
+3. **Join seat A** (agent process 1):
+   ```bash
+   curl -X POST http://localhost:8787/rooms/rm_abc123/join \
+     -H "Content-Type: application/json" \
+     -d '{"agentId":"agent-alice","seat":"A"}'
+   ```
+
+4. **Join seat B** (agent process 2):
+   ```bash
+   curl -X POST http://localhost:8787/rooms/rm_abc123/join \
+     -H "Content-Type: application/json" \
+     -d '{"agentId":"agent-bob","seat":"B"}'
+   ```
+
+5. **Watch the match** (spectator client):
+   ```
+   http://localhost:5173/?room=rm_abc123&api=http://localhost:8787
+   ```
+
+When both seats join, the server starts the match automatically. Spectators connect via WebSocket and see all events in real-time.
+
+#### Deployment
+
+Deploy the match server to Cloudflare Workers:
+
+```bash
+cd packages/match-server
+npm run deploy
+# Your Worker URL: https://telegraph-duel-match-server.your-subdomain.workers.dev
+```
+
+Then spectate with:
+```
+https://marvelus-tech.github.io/telegraph-duel/?room=rm_abc123&api=https://your-worker.workers.dev
+```
+
+#### Architecture
+
+- **Match Server**: `packages/match-server/` (Cloudflare Worker + Durable Object)
+  - HTTP endpoints: create rooms, join seats, submit intents
+  - WebSocket: real-time event broadcast to spectators
+  - Authoritative timing and clash resolution
+
+- **Client**: `src/net/RoomClient.ts` (WebSocket → EventBus adapter)
+  - Spectator mode: `?room=<id>` disables local AI loop
+  - Events from server are mirrored to EventBus
+  - Phaser renders match state from EventBus events
+
+See [`packages/match-server/README.md`](./packages/match-server/README.md) for full API documentation.
 
 ## Gameplay Loop
 

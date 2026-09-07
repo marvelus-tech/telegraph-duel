@@ -1,7 +1,22 @@
 import Phaser from 'phaser';
 import { DuelScene } from './game/DuelScene';
 import { HUDController } from './ui/HUDController';
+import { RoomClient } from './net/RoomClient';
 import './style.css';
+
+// Parse URL parameters for room spectator mode
+const urlParams = new URLSearchParams(window.location.search);
+const roomId = urlParams.get('room');
+const apiBase = urlParams.get('api') || 'http://localhost:8787';
+
+let roomClient: RoomClient | null = null;
+
+// Spectator mode: connect to match room via WebSocket
+if (roomId) {
+  console.log(`[Main] Spectator mode: room=${roomId}, api=${apiBase}`);
+  roomClient = new RoomClient({ apiBase, roomId });
+  roomClient.connect();
+}
 
 // Phaser game config
 const config: Phaser.Types.Core.GameConfig = {
@@ -18,6 +33,9 @@ const config: Phaser.Types.Core.GameConfig = {
     },
   },
 };
+
+// Pass spectator mode flag to game
+(config as any).spectatorMode = !!roomId;
 
 // Initialize game
 const game = new Phaser.Game(config);

@@ -21,21 +21,35 @@ export class DuelScene extends Phaser.Scene {
   private agent2CommitTime = 0;
   private currentRound = 0;
   private matchActive = false;
+  private spectatorMode = false;
 
   constructor() {
     super({ key: 'DuelScene' });
   }
 
   create(): void {
+    // Check if spectator mode is enabled
+    this.spectatorMode = (this.game.config as any).spectatorMode || false;
+
     // Light arena background
     this.cameras.main.setBackgroundColor('#e8f4f8');
 
-    // Initialize agents
-    this.agent1 = new Agent('BlitzBot', 'aggressive', 0x2196f3); // Blue
-    this.agent2 = new Agent('ShieldWall', 'turtle', 0xff9800); // Orange
+    // Initialize agents with placeholder names in spectator mode
+    const agent1Name = this.spectatorMode ? 'Agent A' : 'BlitzBot';
+    const agent2Name = this.spectatorMode ? 'Agent B' : 'ShieldWall';
+    
+    this.agent1 = new Agent(agent1Name, 'aggressive', 0x2196f3); // Blue
+    this.agent2 = new Agent(agent2Name, 'turtle', 0xff9800); // Orange
 
     this.createVisuals();
-    this.startMatch();
+
+    if (this.spectatorMode) {
+      console.log('[DuelScene] Spectator mode: listening for remote events');
+      this.setupSpectatorListeners();
+    } else {
+      console.log('[DuelScene] Local mode: starting auto-play match');
+      this.startMatch();
+    }
   }
 
   private createVisuals(): void {
@@ -339,5 +353,120 @@ export class DuelScene extends Phaser.Scene {
 
   getAgent2(): Agent {
     return this.agent2;
+  }
+
+  private setupSpectatorListeners(): void {
+    eventBus.on('match:start', (event) => {
+      console.log('[DuelScene] Remote match:start', event.data);
+      const data = event.data as { seatA: string; seatB: string };
+      if (data.seatA) this.agent1.state.name = data.seatA;
+      if (data.seatB) this.agent2.state.name = data.seatB;
+      this.agent1.state.score = 0;
+      this.agent2.state.score = 0;
+      this.matchActive = true;
+    });
+
+    eventBus.on('round:start', (event) => {
+      console.log('[DuelScene] Remote round:start', event.data);
+      const data = event.data as { round: number };
+      this.currentRound = data.round;
+      this.roundActive = true;
+      this.roundStartTime = Date.now();
+      this.agent1.resetForRound();
+      this.agent2.resetForRound();
+    });
+
+    eventBus.on('agent:windUp', (event) => {
+      console.log('[DuelScene] Remote agent:windUp', event.data);
+      this.agent1.state.isWindingUp = true;
+      this.agent2.state.isWindingUp = true;
+      this.agent1.updateMood('Charging...');
+      this.agent2.updateMood('Charging...');
+      
+      const centerX = this.cameras.main.width / 2;
+      const centerY = this.cameras.main.height / 2;
+      this.drawAgentSprite(this.sprite1, centerX - 200, centerY, this.agent1.state.color, 'windUp');
+      this.drawAgentSprite(this.sprite2, centerX + 200, centerY, this.agent2.state.color, 'windUp');
+    });
+
+    eventBus.on('agent:feint', (event) => {
+      console.log('[DuelScene] Remote agent:feint', event.data);
+      const data = event.data as { agent: string; seat?: string };
+      const agent = data.seat === 'A' || data.agent === this.agent1.state.name ? this.agent1 : this.agent2;
+      const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
+      
+      agent.state.didFeint = true;
+      agent.updateMood('Feinting!');
+      
+      const centerX = this.cameras.main.width / 2;
+      const centerY = this.cameras.main.height / 2;
+      const x = sprite === this.sprite1 ? centerX - 200 : centerX + 200;
+      this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'feint');
+      
+      this.time.delayedCall(200, () => {
+        this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'windUp');
+        agent.updateMood('Charging...');
+      });
+    });
+
+    eventBus.on('agent:commit', (event) => {
+      console.log('[DuelScene] Remote agent:commit', event.data);
+      const data = event.data as { agent: string; seat?: string };
+      const agent = data.seat === 'A' || data.agent === this.agent1.state.name ? this.agent1 : this.agent2;
+      const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
+      
+      agent.state.hasCommitted = true;
+      agent.state.commitTime = Date.now();
+      agent.updateMood('Committed!');
+      
+      const centerX = this.cameras.main.width / 2;
+      const centerY = this.cameras.main.height / 2;
+      const x = sprite === this.sprite1 ? centerX - 200 : centerX + 200;
+      this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'commit');
+    });
+
+    eventBus.on('clash:resolve', (event) => {
+      console.log('[DuelScene] Remote clash:resolve', event.data);
+      const data = event.data as { winner: string; loser: string; winnerScore: number; loserScore: number };
+      
+      const winner = data.winner === this.agent1.state.name ? this.agent1 : this.agent2;
+      const loser = winner === this.agent1 ? this.agent2 : this.agent1;
+      const winnerSprite = winner === this.agent1 ? this.sprite1 : this.sprite2;
+      const loserSprite = winner === this.agent1 ? this.sprite2 : this.sprite1;
+      
+      this.cameras.main.shake(100, 0.002);
+      
+      winner.state.score = data.winnerScore;
+      loser.state.score = data.loserScore;
+      winner.updateMood('Victory!');
+      loser.updateMood('Defeated...');
+      
+      const centerX = this.cameras.main.width / 2;
+      const centerY = this.cameras.main.height / 2;
+      const x1 = centerX - 200;
+      const x2 = centerX + 200;
+      
+      this.drawAgentSprite(winnerSprite, winner === this.agent1 ? x1 : x2, centerY, winner.state.color, 'triumph');
+      this.drawAgentSprite(loserSprite, loser === this.agent1 ? x1 : x2, centerY, loser.state.color, 'panic');
+    });
+
+    eventBus.on('round:end', (event) => {
+      console.log('[DuelScene] Remote round:end', event.data);
+      this.roundActive = false;
+      
+      this.time.delayedCall(2000, () => {
+        const centerX = this.cameras.main.width / 2;
+        const centerY = this.cameras.main.height / 2;
+        const x1 = centerX - 200;
+        const x2 = centerX + 200;
+        this.drawAgentSprite(this.sprite1, x1, centerY, this.agent1.state.color, 'idle');
+        this.drawAgentSprite(this.sprite2, x2, centerY, this.agent2.state.color, 'idle');
+      });
+    });
+
+    eventBus.on('match:end', (event) => {
+      console.log('[DuelScene] Remote match:end', event.data);
+      this.matchActive = false;
+    });
   }
 }
