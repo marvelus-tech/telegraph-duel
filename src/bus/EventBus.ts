@@ -1,14 +1,20 @@
-// Typed EventBus for game events
+/**
+ * Typed EventBus for Telegraph Duel game events.
+ * 
+ * Stable contract for external integrations (e.g., Solana plumbing).
+ * See EVENTBUS.md for complete documentation and payload shapes.
+ */
+
 export type GameEventType =
-  | 'match:start'
-  | 'round:start'
-  | 'agent:windUp'
-  | 'agent:feint'
-  | 'agent:commit'
-  | 'agent:panic'
-  | 'clash:resolve'
-  | 'round:end'
-  | 'match:end';
+  | 'match:start'    // Match begins
+  | 'round:start'    // Round begins
+  | 'agent:windUp'   // Both agents charging
+  | 'agent:feint'    // Agent performs feint
+  | 'agent:commit'   // Agent commits attack
+  | 'agent:panic'    // Agent fails to commit (reserved)
+  | 'clash:resolve'  // Round winner determined
+  | 'round:end'      // Round completes
+  | 'match:end';     // Match completes
 
 export interface GameEvent {
   type: GameEventType;

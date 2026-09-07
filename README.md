@@ -42,18 +42,41 @@ The game will auto-play continuously. Just open the browser and watch the duels 
 ## Project Structure
 
 ```
-src/
+src/                      # Game code (Phaser, AI, UI)
 ├── ai/
 │   └── Agent.ts          # AI agent personalities & decision logic
 ├── bus/
-│   └── EventBus.ts       # Typed event system
+│   └── EventBus.ts       # Typed event system (integration contract)
 ├── game/
 │   └── DuelScene.ts      # Main Phaser game scene
 ├── ui/
 │   └── HUDController.ts  # DOM HUD overlay controller
 ├── main.ts               # Entry point
 └── style.css             # HUD styles
+
+solana/                   # Reserved for Dex's Solana integration
+└── README.md             # Placeholder
+
+EVENTBUS.md               # Event contract documentation
 ```
+
+## Integration Contract
+
+The game emits typed events via `EventBus` (see [`EVENTBUS.md`](./EVENTBUS.md) for complete contract).
+
+External systems can subscribe to game events without coupling to internals:
+
+```typescript
+import { eventBus } from './src/bus/EventBus';
+
+eventBus.on('match:start', (event) => {
+  console.log('Match started:', event.data);
+});
+```
+
+**Key Events**: `match:start`, `round:start`, `agent:commit`, `clash:resolve`, `match:end`
+
+See [`EVENTBUS.md`](./EVENTBUS.md) for payload shapes and ordering guarantees.
 
 ## Gameplay Loop
 
