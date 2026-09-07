@@ -79,21 +79,21 @@ export class HUDController {
 
     switch (event.type) {
       case 'match:start':
-        message = `<span class="timestamp">${time}</span> Match started: <strong>${event.data?.agent1}</strong> vs <strong>${event.data?.agent2}</strong>`;
+        message = `<span class="timestamp">${time}</span> Match started: <strong>${event.payload?.agent1}</strong> vs <strong>${event.payload?.agent2}</strong>`;
         break;
       case 'round:start':
-        message = `<span class="timestamp">${time}</span> Round ${event.data?.round} begins!`;
+        message = `<span class="timestamp">${time}</span> Round ${event.payload?.round} begins!`;
         // Start countdown timer if windowEndMs is present
-        if (event.data?.windowEndMs) {
-          this.windowEndMs = event.data.windowEndMs as number;
+        if (event.payload?.windowEndMs) {
+          this.windowEndMs = event.payload.windowEndMs as number;
           this.startCountdown();
         }
         break;
       case 'round:extend':
-        message = `<span class="timestamp">${time}</span> ⏱️ Round ${event.data?.round} extended!`;
+        message = `<span class="timestamp">${time}</span> ⏱️ Round ${event.payload?.round} extended!`;
         // Restart countdown with new windowEndMs
-        if (event.data?.windowEndMs) {
-          this.windowEndMs = event.data.windowEndMs as number;
+        if (event.payload?.windowEndMs) {
+          this.windowEndMs = event.payload.windowEndMs as number;
           this.startCountdown();
         }
         break;
@@ -101,36 +101,40 @@ export class HUDController {
         message = `<span class="timestamp">${time}</span> Both agents charging...`;
         break;
       case 'agent:feint':
-        message = `<span class="timestamp">${time}</span> <strong>${event.data?.agent}</strong> feints!`;
+        message = `<span class="timestamp">${time}</span> <strong>${event.payload?.agent}</strong> feints!`;
         break;
       case 'agent:commit':
-        message = `<span class="timestamp">${time}</span> <strong>${event.data?.agent}</strong> commits!`;
+        message = `<span class="timestamp">${time}</span> <strong>${event.payload?.agent}</strong> commits!`;
         break;
       case 'clash:resolve':
-        const reason = this.formatReason(event.data?.reason as string);
-        if (event.data?.winner) {
-          message = `<span class="timestamp">${time}</span> 💥 <strong>${event.data?.winner}</strong> wins! ${reason} (${event.data?.winnerScore}-${event.data?.loserScore})`;
+        const reason = this.formatReason(event.payload?.reason as string);
+        if (event.payload?.winner) {
+          message = `<span class="timestamp">${time}</span> 💥 <strong>${event.payload?.winner}</strong> wins! ${reason} (${event.payload?.winnerScore}-${event.payload?.loserScore})`;
         } else {
           message = `<span class="timestamp">${time}</span> 🤝 Draw! ${reason}`;
         }
         this.stopCountdown();
         break;
       case 'round:end':
-        if (event.data?.winner) {
-          message = `<span class="timestamp">${time}</span> Round ${event.data?.round} won by <strong>${event.data?.winner}</strong>`;
+        if (event.payload?.winner) {
+          message = `<span class="timestamp">${time}</span> Round ${event.payload?.round} won by <strong>${event.payload?.winner}</strong>`;
         } else {
-          message = `<span class="timestamp">${time}</span> Round ${event.data?.round} ended in a draw`;
+          message = `<span class="timestamp">${time}</span> Round ${event.payload?.round} ended in a draw`;
         }
         break;
       case 'match:end':
-        message = `<span class="timestamp">${time}</span> 🏆 <strong>${event.data?.winner}</strong> wins the match! (${event.data?.finalScore1}-${event.data?.finalScore2})`;
+        message = `<span class="timestamp">${time}</span> 🏆 <strong>${event.payload?.winner}</strong> wins the match! (${event.payload?.finalScoresA}-${event.payload?.finalScoresB})`;
         break;
       case 'score.settled':
-        const txShort = (event.data?.txSignature as string)?.slice(0, 8) || 'unknown';
-        const reason = event.data?.lastClash?.reason || 'completed';
-        const scoresA = event.data?.scores?.A || 0;
-        const scoresB = event.data?.scores?.B || 0;
-        message = `<span class="timestamp">${time}</span> SETTLED tx ${txShort}… reason ${reason} scores ${scoresA}-${scoresB}`;
+        const roomId = event.payload?.roomId as string || 'unknown';
+        const winnerAgentId = event.payload?.winnerAgentId as string || 'unknown';
+        const winnerSeat = event.payload?.winnerSeat as string || '?';
+        const finalScoresA = event.payload?.finalScoresA || 0;
+        const finalScoresB = event.payload?.finalScoresB || 0;
+        const txShort = (event.payload?.txSig as string)?.slice(0, 8) || 'unknown';
+        const pdaA = (event.payload?.scorePdaA as string)?.slice(0, 8) || 'unknown';
+        const pdaB = (event.payload?.scorePdaB as string)?.slice(0, 8) || 'unknown';
+        message = `<span class="timestamp">${time}</span> SETTLED room ${roomId} winner ${winnerAgentId} (${winnerSeat}) scores ${finalScoresA}-${finalScoresB} tx ${txShort}… PDAs ${pdaA}…/${pdaB}…`;
         break;
     }
 

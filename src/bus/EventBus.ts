@@ -20,7 +20,7 @@ export type GameEventType =
 
 export interface GameEvent {
   type: GameEventType;
-  data?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -43,10 +43,10 @@ export class EventBus {
     }
   }
 
-  emit(type: GameEventType, data?: Record<string, unknown>): void {
+  emit(type: GameEventType, payload?: Record<string, unknown>): void {
     const event: GameEvent = {
       type,
-      data,
+      payload,
       timestamp: Date.now(),
     };
 

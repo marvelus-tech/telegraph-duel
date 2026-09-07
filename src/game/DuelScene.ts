@@ -311,8 +311,9 @@ export class DuelScene extends Phaser.Scene {
 
     eventBus.emit('match:end', {
       winner: winner.state.name,
-      finalScore1: this.agent1.state.score,
-      finalScore2: this.agent2.state.score,
+      finalScoresA: this.agent1.state.score,
+      finalScoresB: this.agent2.state.score,
+      reason: 'best_of_5_complete',
     });
 
     // Restart match after delay
@@ -357,19 +358,19 @@ export class DuelScene extends Phaser.Scene {
 
   private setupSpectatorListeners(): void {
     eventBus.on('match:start', (event) => {
-      console.log('[DuelScene] Remote match:start', event.data);
-      const data = event.data as { seatA: string; seatB: string };
-      if (data.seatA) this.agent1.state.name = data.seatA;
-      if (data.seatB) this.agent2.state.name = data.seatB;
+      console.log('[DuelScene] Remote match:start', event.payload);
+      const payload = event.payload as { seatA: string; seatB: string };
+      if (payload.seatA) this.agent1.state.name = payload.seatA;
+      if (payload.seatB) this.agent2.state.name = payload.seatB;
       this.agent1.state.score = 0;
       this.agent2.state.score = 0;
       this.matchActive = true;
     });
 
     eventBus.on('round:start', (event) => {
-      console.log('[DuelScene] Remote round:start', event.data);
-      const data = event.data as { round: number };
-      this.currentRound = data.round;
+      console.log('[DuelScene] Remote round:start', event.payload);
+      const payload = event.payload as { round: number };
+      this.currentRound = payload.round;
       this.roundActive = true;
       this.roundStartTime = Date.now();
       this.agent1.resetForRound();
@@ -377,7 +378,7 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('agent:windUp', (event) => {
-      console.log('[DuelScene] Remote agent:windUp', event.data);
+      console.log('[DuelScene] Remote agent:windUp', event.payload);
       this.agent1.state.isWindingUp = true;
       this.agent2.state.isWindingUp = true;
       this.agent1.updateMood('Charging...');
@@ -390,9 +391,9 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('agent:feint', (event) => {
-      console.log('[DuelScene] Remote agent:feint', event.data);
-      const data = event.data as { agent: string; seat?: string };
-      const agent = data.seat === 'A' || data.agent === this.agent1.state.name ? this.agent1 : this.agent2;
+      console.log('[DuelScene] Remote agent:feint', event.payload);
+      const payload = event.payload as { agent: string; seat?: string };
+      const agent = payload.seat === 'A' || payload.agent === this.agent1.state.name ? this.agent1 : this.agent2;
       const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
       
       agent.state.didFeint = true;
@@ -410,9 +411,9 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('agent:commit', (event) => {
-      console.log('[DuelScene] Remote agent:commit', event.data);
-      const data = event.data as { agent: string; seat?: string };
-      const agent = data.seat === 'A' || data.agent === this.agent1.state.name ? this.agent1 : this.agent2;
+      console.log('[DuelScene] Remote agent:commit', event.payload);
+      const payload = event.payload as { agent: string; seat?: string };
+      const agent = payload.seat === 'A' || payload.agent === this.agent1.state.name ? this.agent1 : this.agent2;
       const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
       
       agent.state.hasCommitted = true;
@@ -426,18 +427,18 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('clash:resolve', (event) => {
-      console.log('[DuelScene] Remote clash:resolve', event.data);
-      const data = event.data as { winner: string; loser: string; winnerScore: number; loserScore: number };
+      console.log('[DuelScene] Remote clash:resolve', event.payload);
+      const payload = event.payload as { winner: string; loser: string; winnerScore: number; loserScore: number };
       
-      const winner = data.winner === this.agent1.state.name ? this.agent1 : this.agent2;
+      const winner = payload.winner === this.agent1.state.name ? this.agent1 : this.agent2;
       const loser = winner === this.agent1 ? this.agent2 : this.agent1;
       const winnerSprite = winner === this.agent1 ? this.sprite1 : this.sprite2;
       const loserSprite = winner === this.agent1 ? this.sprite2 : this.sprite1;
       
       this.cameras.main.shake(100, 0.002);
       
-      winner.state.score = data.winnerScore;
-      loser.state.score = data.loserScore;
+      winner.state.score = payload.winnerScore;
+      loser.state.score = payload.loserScore;
       winner.updateMood('Victory!');
       loser.updateMood('Defeated...');
       
@@ -451,7 +452,7 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('round:end', (event) => {
-      console.log('[DuelScene] Remote round:end', event.data);
+      console.log('[DuelScene] Remote round:end', event.payload);
       this.roundActive = false;
       
       this.time.delayedCall(2000, () => {
@@ -465,7 +466,7 @@ export class DuelScene extends Phaser.Scene {
     });
 
     eventBus.on('match:end', (event) => {
-      console.log('[DuelScene] Remote match:end', event.data);
+      console.log('[DuelScene] Remote match:end', event.payload);
       this.matchActive = false;
     });
   }

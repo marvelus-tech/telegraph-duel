@@ -1,18 +1,26 @@
 import { eventBus } from '../bus/EventBus';
 
 /**
- * Minimal adapter for score.settled events from external sources.
+ * Minimal adapter for score.settled events from Dex bridge.
+ * Matches the exact payload structure from PR #15.
  * Can bridge posted messages or future webhook callbacks to EventBus.
  */
 
 export interface ScoreSettledPayload {
-  matchId: string;
   roomId: string;
-  scores: { A: number; B: number };
-  agentIds: { A: string; B: string };
-  lastClash?: { reason: string };
-  txSignature: string;
-  scorePDAs: { A: string; B: string };
+  matchId: string;
+  winnerAgentId: string;
+  winnerSeat: 'A' | 'B';
+  finalScoresA: number;
+  finalScoresB: number;
+  agentIdA: string;
+  agentIdB: string;
+  walletA: string;
+  walletB: string;
+  scorePdaA: string;
+  scorePdaB: string;
+  txSig: string;
+  lastClashReason?: string;
 }
 
 export class ScoreSettledAdapter {
