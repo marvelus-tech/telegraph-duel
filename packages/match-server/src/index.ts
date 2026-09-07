@@ -5,6 +5,7 @@ export { MatchRoom };
 
 interface Env {
   MATCH_ROOM: DurableObjectNamespace;
+  BRIDGE_TOKEN?: string;
 }
 
 function generateRoomId(): string {
@@ -26,7 +27,7 @@ function corsHeaders(origin?: string | null): HeadersInit {
   return {
     'Access-Control-Allow-Origin': allowOrigin,
     'Access-Control-Allow-Methods': 'GET, POST, OPTIONS',
-    'Access-Control-Allow-Headers': 'Content-Type',
+    'Access-Control-Allow-Headers': 'Content-Type, X-Bridge-Token',
   };
 }
 

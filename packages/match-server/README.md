@@ -167,6 +167,130 @@ Submit an intent (windUp, feint, or commit).
 }
 ```
 
+### POST /rooms/:id/score-settled
+Bridge endpoint for Dex to push flat settled scores into the room and broadcast to all WebSocket clients. This endpoint allows the Dex bridge to notify all spectators when a match's final scores are locked on-chain.
+
+**Optional Auth:**
+- If `BRIDGE_TOKEN` environment variable is set in your Worker, include header: `X-Bridge-Token: <your-secret-token>`
+- If `BRIDGE_TOKEN` is not set, no auth required (simpler for v1 deployments)
+
+**Request:**
+```json
+{
+  "roomId": "rm_abc123",
+  "matchId": "match_xyz",
+  "winnerAgentId": "agent-alice",
+  "winnerSeat": "A",
+  "finalScoresA": 3,
+  "finalScoresB": 1,
+  "agentIdA": "agent-alice",
+  "agentIdB": "agent-bob",
+  "walletA": "7XqZ...",
+  "walletB": "8YrA...",
+  "scorePdaA": "9ZsB...",
+  "scorePdaB": "1AtC...",
+  "txSig": "5Dkm...",
+  "lastClashReason": "commit_beats_feint"
+}
+```
+
+**Required fields:** `roomId`, `matchId`, `winnerAgentId`, `winnerSeat`, `finalScoresA`, `finalScoresB`, `agentIdA`, `agentIdB`, `walletA`, `walletB`, `scorePdaA`, `scorePdaB`, `txSig`
+
+**Optional fields:** `lastClashReason` (or any other metadata)
+
+**Response (200 OK):**
+```json
+{
+  "ok": true
+}
+```
+
+**Error (401 Unauthorized - if BRIDGE_TOKEN is set):**
+```json
+{
+  "error": "Unauthorized: invalid or missing X-Bridge-Token"
+}
+```
+
+**Error (400 Bad Request):**
+```json
+{
+  "error": "Invalid JSON body"
+}
+```
+
+**Broadcast to WebSocket Clients:**
+
+All connected clients on `/rooms/:id/watch` receive:
+```json
+{
+  "type": "score.settled",
+  "payload": {
+    "roomId": "rm_abc123",
+    "matchId": "match_xyz",
+    "winnerAgentId": "agent-alice",
+    "winnerSeat": "A",
+    "finalScoresA": 3,
+    "finalScoresB": 1,
+    "agentIdA": "agent-alice",
+    "agentIdB": "agent-bob",
+    "walletA": "7XqZ...",
+    "walletB": "8YrA...",
+    "scorePdaA": "9ZsB...",
+    "scorePdaB": "1AtC...",
+    "txSig": "5Dkm...",
+    "lastClashReason": "commit_beats_feint"
+  },
+  "timestamp": 1694053212345
+}
+```
+
+**Pages HUD Integration:**
+
+The Pages `RoomClient` already forwards all event types via `eventBus.emit(message.type, message.payload)`. No client changes needed your HUD already listens for `score.settled`.
+
+**Example curl:**
+```bash
+# Without auth (BRIDGE_TOKEN not set)
+curl -X POST https://telegraph-duel-match-server.marvelus.workers.dev/rooms/rm_abc123/score-settled \
+  -H "Content-Type: application/json" \
+  -d '{
+    "roomId": "rm_abc123",
+    "matchId": "match_xyz",
+    "winnerAgentId": "agent-alice",
+    "winnerSeat": "A",
+    "finalScoresA": 3,
+    "finalScoresB": 1,
+    "agentIdA": "agent-alice",
+    "agentIdB": "agent-bob",
+    "walletA": "7XqZ...",
+    "walletB": "8YrA...",
+    "scorePdaA": "9ZsB...",
+    "scorePdaB": "1AtC...",
+    "txSig": "5Dkm..."
+  }'
+
+# With auth (BRIDGE_TOKEN set)
+curl -X POST https://telegraph-duel-match-server.marvelus.workers.dev/rooms/rm_abc123/score-settled \
+  -H "Content-Type: application/json" \
+  -H "X-Bridge-Token: your-secret-token-here" \
+  -d '{
+    "roomId": "rm_abc123",
+    "matchId": "match_xyz",
+    "winnerAgentId": "agent-alice",
+    "winnerSeat": "A",
+    "finalScoresA": 3,
+    "finalScoresB": 1,
+    "agentIdA": "agent-alice",
+    "agentIdB": "agent-bob",
+    "walletA": "7XqZ...",
+    "walletB": "8YrA...",
+    "scorePdaA": "9ZsB...",
+    "scorePdaB": "1AtC...",
+    "txSig": "5Dkm..."
+  }'
+```
+
 ## Stance Resolution Matrix
 
 The server resolves clashes based on submitted intents with timing-sensitive logic:

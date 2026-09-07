@@ -9,7 +9,7 @@ const WIND_UP_DURATION = 800;
 const FEINT_WINDOW = 400;
 
 interface Env {
-  // Environment bindings (empty for now)
+  BRIDGE_TOKEN?: string;
 }
 
 export class MatchRoom extends DurableObject {
@@ -17,9 +17,11 @@ export class MatchRoom extends DurableObject {
   private sessions: Set<WebSocket> = new Set();
   private roundTimer: number | null = null;
   private clashResolvedForRound: number | null = null;
+  private env: Env;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    this.env = env;
     
     this.ctx.blockConcurrencyWhile(async () => {
       const stored = await this.ctx.storage.get<RoomState>('state');
@@ -66,6 +68,10 @@ export class MatchRoom extends DurableObject {
         });
       }
       return this.handleIntent(request);
+    }
+
+    if (request.method === 'POST' && url.pathname.endsWith('/score-settled')) {
+      return this.handleScoreSettled(request);
     }
 
     return new Response(JSON.stringify({ error: 'Not found' }), { 
@@ -196,6 +202,40 @@ export class MatchRoom extends DurableObject {
 
   private async handleIntentFromWS(intent: IntentRequest): Promise<void> {
     await this.processIntent(intent);
+  }
+
+  private async handleScoreSettled(request: Request): Promise<Response> {
+    // Optional auth: require X-Bridge-Token if BRIDGE_TOKEN env is set
+    if (this.env.BRIDGE_TOKEN) {
+      const providedToken = request.headers.get('X-Bridge-Token');
+      if (!providedToken || providedToken !== this.env.BRIDGE_TOKEN) {
+        return new Response(JSON.stringify({ error: 'Unauthorized: invalid or missing X-Bridge-Token' }), {
+          status: 401,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+    }
+
+    let payload: Record<string, unknown>;
+    try {
+      payload = await request.json() as Record<string, unknown>;
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Invalid JSON body' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
+
+    // Broadcast score.settled event to all WebSocket clients
+    this.broadcast({
+      type: 'score.settled',
+      payload,
+      timestamp: Date.now(),
+    });
+
+    return new Response(JSON.stringify({ ok: true }), {
+      headers: { 'Content-Type': 'application/json' },
+    });
   }
 
   private async processIntent(intent: IntentRequest): Promise<Response> {
