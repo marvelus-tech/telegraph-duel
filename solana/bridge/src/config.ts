@@ -19,7 +19,7 @@ export function loadConfig(): BridgeConfig & { feePayerKeypair: Keypair } {
   }
 
   const solanaRpcUrl = process.env.SOLANA_RPC_URL || 'http://127.0.0.1:8899';
-  const matchServerUrl = process.env.MATCH_SERVER_URL || 'https://telegraph-duel-match.marvelus-tech.workers.dev';
+  const matchServerUrl = process.env.MATCH_SERVER_URL || 'https://telegraph-duel-match-server.marvelus.workers.dev';
   const programIdStr = process.env.PROGRAM_ID || 'HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM';
   const pollIntervalMs = parseInt(process.env.POLL_INTERVAL_MS || '5000', 10);
 
@@ -104,7 +104,7 @@ export function createTestConfig(options: {
 
   return {
     solanaRpcUrl: options.solanaRpcUrl || 'http://127.0.0.1:8899',
-    matchServerUrl: options.matchServerUrl || 'https://telegraph-duel-match.marvelus-tech.workers.dev',
+    matchServerUrl: options.matchServerUrl || 'https://telegraph-duel-match-server.marvelus.workers.dev',
     agentWallets,
     feePayerKeypair,
     programId: new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM'),

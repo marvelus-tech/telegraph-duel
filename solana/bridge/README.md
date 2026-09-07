@@ -67,7 +67,7 @@ cp .env.example .env
 SOLANA_RPC_URL=http://127.0.0.1:8899
 
 # Match server URL
-MATCH_SERVER_URL=https://telegraph-duel-match.marvelus-tech.workers.dev
+MATCH_SERVER_URL=https://telegraph-duel-match-server.marvelus.workers.dev
 
 # Agent ID to wallet mapping (comma-separated)
 # Format: agentId:walletPublicKeyBase58,agentId:walletPublicKeyBase58
@@ -129,7 +129,7 @@ Enter agent IDs (comma-separated, e.g., alice,bob): alice,bob
 
 [Demo] Configuration:
   RPC: http://127.0.0.1:8899
-  Match Server: https://telegraph-duel-match.marvelus-tech.workers.dev
+  Match Server: https://telegraph-duel-match-server.marvelus.workers.dev
   Program ID: HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM
   Agent Wallets: 2 configured
 
@@ -188,7 +188,7 @@ import { MatchServerBridge } from '@telegraph-duel/match-server-bridge';
 // Set up configuration
 const config = {
   solanaRpcUrl: 'http://127.0.0.1:8899',
-  matchServerUrl: 'https://telegraph-duel-match.marvelus-tech.workers.dev',
+  matchServerUrl: 'https://telegraph-duel-match-server.marvelus.workers.dev',
   agentWallets: new Map([
     ['alice', new PublicKey('3K9Y...')],
     ['bob', new PublicKey('5J7X...')],
@@ -394,7 +394,7 @@ Create `.env` file:
 cd solana/bridge
 cat > .env << EOF
 SOLANA_RPC_URL=http://127.0.0.1:8899
-MATCH_SERVER_URL=https://telegraph-duel-match.marvelus-tech.workers.dev
+MATCH_SERVER_URL=https://telegraph-duel-match-server.marvelus.workers.dev
 AGENT_WALLET_MAP=alice:<alice-pubkey>,bob:<bob-pubkey>
 FEE_PAYER_PRIVATE_KEY=<fee-payer-base64-secret>
 PROGRAM_ID=HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM
@@ -578,7 +578,7 @@ AGENT_WALLET_MAP=alice:9xQeW...,bob:3K9Y...
 **Solution:** Wait for the match to finish, or verify room status:
 
 ```bash
-curl https://telegraph-duel-match.marvelus-tech.workers.dev/rooms/rm_abc123
+curl https://telegraph-duel-match-server.marvelus.workers.dev/rooms/rm_abc123
 ```
 
 ### Error: "Insufficient funds for transaction"
