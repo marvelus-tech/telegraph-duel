@@ -72,7 +72,7 @@ export class MatchServerBridge {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(event),
+        body: JSON.stringify(event.payload), // flat payload (Worker wraps for WS)
       });
 
       if (!response.ok) {
