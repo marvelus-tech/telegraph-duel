@@ -3,6 +3,8 @@ import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig 
 
 const DEFAULT_ROUNDS = 5;
 const DEFAULT_WINDOW_MS = 5000;
+const DEFAULT_FIRST_TO = 3;
+const DEFAULT_BEST_OF = 5;
 const WIND_UP_DURATION = 800;
 const FEINT_WINDOW = 400;
 
@@ -42,14 +44,39 @@ export class MatchRoom extends DurableObject {
     }
 
     if (request.method === 'POST' && url.pathname.endsWith('/join')) {
+      if (!this.validateAgentHeaders(request)) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header.' 
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return this.handleJoin(request);
     }
 
     if (request.method === 'POST' && url.pathname.endsWith('/intent')) {
+      if (!this.validateAgentHeaders(request)) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header.' 
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return this.handleIntent(request);
     }
 
-    return new Response('Not found', { status: 404 });
+    return new Response(JSON.stringify({ error: 'Not found' }), { 
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  private validateAgentHeaders(request: Request): boolean {
+    const userAgent = request.headers.get('User-Agent');
+    const agentToken = request.headers.get('X-Agent-Token');
+    return (userAgent && userAgent.trim().length > 0) || (agentToken && agentToken.trim().length > 0);
   }
 
   private async handleInit(request: Request): Promise<Response> {
@@ -232,7 +259,7 @@ export class MatchRoom extends DurableObject {
     return null;
   }
 
-  async initialize(roomId: string, config: { rounds?: number; windowMs?: number } = {}): Promise<void> {
+  async initialize(roomId: string, config: { rounds?: number; windowMs?: number; firstTo?: number; bestOf?: number } = {}): Promise<void> {
     this.state = {
       roomId,
       status: 'waiting',
@@ -242,6 +269,8 @@ export class MatchRoom extends DurableObject {
       config: {
         rounds: config.rounds ?? DEFAULT_ROUNDS,
         windowMs: config.windowMs ?? DEFAULT_WINDOW_MS,
+        firstTo: config.firstTo ?? DEFAULT_FIRST_TO,
+        bestOf: config.bestOf ?? DEFAULT_BEST_OF,
       },
       createdAt: new Date().toISOString(),
       intents: {},
@@ -275,7 +304,7 @@ export class MatchRoom extends DurableObject {
   private startRound(): void {
     if (!this.state) return;
 
-    if (this.state.scores.A >= 3 || this.state.scores.B >= 3) {
+    if (this.state.scores.A >= this.state.config.firstTo || this.state.scores.B >= this.state.config.firstTo) {
       this.endMatch();
       return;
     }
@@ -283,6 +312,7 @@ export class MatchRoom extends DurableObject {
     this.state.currentRound++;
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
+    this.state.roundExtended = false;
 
     this.saveState();
 
@@ -295,6 +325,7 @@ export class MatchRoom extends DurableObject {
         round: this.state.currentRound,
         windowStartMs,
         windowEndMs,
+        firstTo: this.state.config.firstTo,
       },
       timestamp: Date.now(),
     });
@@ -329,27 +360,67 @@ export class MatchRoom extends DurableObject {
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
 
-    let winner: Seat | null = null;
-
+    // Check for missing intents
     if (!intentA && !intentB) {
-      winner = Math.random() < 0.5 ? 'A' : 'B';
-    } else if (!intentA) {
-      winner = 'B';
-    } else if (!intentB) {
-      winner = 'A';
-    } else {
-      const timeA = intentA.timestamp + (intentA.type === 'feint' ? 100 : 0);
-      const timeB = intentB.timestamp + (intentB.type === 'feint' ? 100 : 0);
+      // Both missing: draw, no score
+      this.broadcastDraw('draw_both_missing');
+      return;
+    }
 
-      if (intentA.type === 'commit' && intentB.type === 'feint') {
-        winner = 'A';
-      } else if (intentA.type === 'feint' && intentB.type === 'commit') {
-        winner = 'B';
-      } else if (intentA.type === 'commit' && intentB.type === 'commit') {
-        winner = timeA < timeB ? 'A' : 'B';
+    if (!intentA || !intentB) {
+      // One missing: extend once if not already extended, else draw
+      if (!this.state.roundExtended) {
+        this.extendRound();
+        return;
       } else {
-        winner = Math.random() < 0.5 ? 'A' : 'B';
+        this.broadcastDraw('draw_after_extend_miss');
+        return;
       }
+    }
+
+    // Both have intents: resolve clash
+    // Determine final stance: last intent among windUp/feint/commit
+    // commit overrides feint overrides windUp
+    const stanceA = this.getFinalStance(intentA.type);
+    const stanceB = this.getFinalStance(intentB.type);
+
+    let winner: Seat | null = null;
+    let reason = '';
+
+    if (stanceA === 'commit' && stanceB === 'commit') {
+      // Double commit = draw
+      this.broadcastDraw('draw_double_commit');
+      return;
+    } else if (stanceA === 'commit' && stanceB === 'feint') {
+      winner = 'A';
+      reason = 'commit_beats_feint';
+    } else if (stanceA === 'feint' && stanceB === 'commit') {
+      winner = 'B';
+      reason = 'commit_beats_feint';
+    } else if (stanceA === 'feint' && stanceB === 'windUp') {
+      winner = 'A';
+      reason = 'feint_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'feint') {
+      winner = 'B';
+      reason = 'feint_beats_windUp';
+    } else if (stanceA === 'commit' && stanceB === 'windUp') {
+      winner = 'A';
+      reason = 'commit_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'commit') {
+      winner = 'B';
+      reason = 'commit_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'windUp') {
+      // Double windUp = draw
+      this.broadcastDraw('draw_double_windUp');
+      return;
+    } else if (stanceA === 'feint' && stanceB === 'feint') {
+      // Double feint = draw
+      this.broadcastDraw('draw_double_feint');
+      return;
+    } else {
+      // Fallback: draw if we can't determine
+      this.broadcastDraw('draw_unknown');
+      return;
     }
 
     const loser: Seat = winner === 'A' ? 'B' : 'A';
@@ -369,6 +440,7 @@ export class MatchRoom extends DurableObject {
         damage: 1,
         winnerScore: this.state.scores[winner],
         loserScore: this.state.scores[loser],
+        reason,
       },
       timestamp: Date.now(),
     });
@@ -387,10 +459,82 @@ export class MatchRoom extends DurableObject {
     setTimeout(() => this.startRound(), 2000);
   }
 
+  private getFinalStance(intentType: IntentType): IntentType {
+    // For simplicity: in this spike, each intent IS the final stance
+    // In a full implementation, track all intents in order and pick last
+    return intentType;
+  }
+
+  private extendRound(): void {
+    if (!this.state) return;
+
+    this.state.roundExtended = true;
+    this.saveState();
+
+    const windowStartMs = Date.now();
+    const windowEndMs = windowStartMs + this.state.config.windowMs;
+
+    this.broadcast({
+      type: 'round:extend',
+      payload: {
+        round: this.state.currentRound,
+        windowStartMs,
+        windowEndMs,
+      },
+      timestamp: Date.now(),
+    });
+
+    setTimeout(() => {
+      this.broadcast({
+        type: 'round:windowClose',
+        payload: {
+          round: this.state?.currentRound,
+          closedAtMs: Date.now(),
+        },
+        timestamp: Date.now(),
+      });
+      this.resolveClash();
+    }, this.state.config.windowMs);
+  }
+
+  private broadcastDraw(reason: string): void {
+    if (!this.state) return;
+
+    this.broadcast({
+      type: 'clash:resolve',
+      payload: {
+        round: this.state.currentRound,
+        seatA: this.state.seats.A?.agentId,
+        seatB: this.state.seats.B?.agentId,
+        winner: null,
+        loser: null,
+        outcome: 'draw',
+        damage: 0,
+        winnerScore: this.state.scores.A,
+        loserScore: this.state.scores.B,
+        reason,
+      },
+      timestamp: Date.now(),
+    });
+
+    this.broadcast({
+      type: 'round:end',
+      payload: {
+        round: this.state.currentRound,
+        winner: null,
+        scoresA: this.state.scores.A,
+        scoresB: this.state.scores.B,
+      },
+      timestamp: Date.now(),
+    });
+
+    setTimeout(() => this.startRound(), 2000);
+  }
+
   private endMatch(): void {
     if (!this.state) return;
 
-    const winner = this.state.scores.A >= 3 ? 'A' : 'B';
+    const winner = this.state.scores.A >= this.state.config.firstTo ? 'A' : 'B';
     const loser = winner === 'A' ? 'B' : 'A';
 
     this.broadcast({
@@ -399,7 +543,7 @@ export class MatchRoom extends DurableObject {
         winner: this.state.seats[winner]?.agentId,
         finalScoresA: this.state.scores.A,
         finalScoresB: this.state.scores.B,
-        reason: 'best_of_5_complete',
+        reason: `first_to_${this.state.config.firstTo}_complete`,
       },
       timestamp: Date.now(),
     });

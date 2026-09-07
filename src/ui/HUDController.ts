@@ -5,6 +5,8 @@ export class HUDController {
   private hudElement: HTMLElement;
   private eventLog: string[] = [];
   private maxLogItems = 10;
+  private windowEndMs: number | null = null;
+  private countdownInterval: number | null = null;
 
   constructor(hudElement: HTMLElement) {
     this.hudElement = hudElement;
@@ -44,6 +46,7 @@ export class HUDController {
 
       <div class="center-hud">
         <div class="live-badge">● LIVE</div>
+        <div class="countdown-timer" id="countdown-timer" style="display: none; margin-top: 8px; font-size: 16px; font-weight: bold; color: #333;"></div>
       </div>
 
       <div class="event-log" id="event-log">
@@ -80,6 +83,19 @@ export class HUDController {
         break;
       case 'round:start':
         message = `<span class="timestamp">${time}</span> Round ${event.data?.round} begins!`;
+        // Start countdown timer if windowEndMs is present
+        if (event.data?.windowEndMs) {
+          this.windowEndMs = event.data.windowEndMs as number;
+          this.startCountdown();
+        }
+        break;
+      case 'round:extend':
+        message = `<span class="timestamp">${time}</span> ⏱️ Round ${event.data?.round} extended!`;
+        // Restart countdown with new windowEndMs
+        if (event.data?.windowEndMs) {
+          this.windowEndMs = event.data.windowEndMs as number;
+          this.startCountdown();
+        }
         break;
       case 'agent:windUp':
         message = `<span class="timestamp">${time}</span> Both agents charging...`;
@@ -91,10 +107,20 @@ export class HUDController {
         message = `<span class="timestamp">${time}</span> <strong>${event.data?.agent}</strong> commits!`;
         break;
       case 'clash:resolve':
-        message = `<span class="timestamp">${time}</span> 💥 <strong>${event.data?.winner}</strong> wins the clash! (${event.data?.winnerScore}-${event.data?.loserScore})`;
+        const reason = this.formatReason(event.data?.reason as string);
+        if (event.data?.winner) {
+          message = `<span class="timestamp">${time}</span> 💥 <strong>${event.data?.winner}</strong> wins! ${reason} (${event.data?.winnerScore}-${event.data?.loserScore})`;
+        } else {
+          message = `<span class="timestamp">${time}</span> 🤝 Draw! ${reason}`;
+        }
+        this.stopCountdown();
         break;
       case 'round:end':
-        message = `<span class="timestamp">${time}</span> Round ${event.data?.round} won by <strong>${event.data?.winner}</strong>`;
+        if (event.data?.winner) {
+          message = `<span class="timestamp">${time}</span> Round ${event.data?.round} won by <strong>${event.data?.winner}</strong>`;
+        } else {
+          message = `<span class="timestamp">${time}</span> Round ${event.data?.round} ended in a draw`;
+        }
         break;
       case 'match:end':
         message = `<span class="timestamp">${time}</span> 🏆 <strong>${event.data?.winner}</strong> wins the match! (${event.data?.finalScore1}-${event.data?.finalScore2})`;
@@ -104,6 +130,64 @@ export class HUDController {
     if (message) {
       this.eventLog.push(message);
       this.updateEventLog();
+    }
+  }
+
+  private formatReason(reason: string): string {
+    if (!reason) return '';
+    const formatted = reason
+      .replace(/_/g, ' ')
+      .replace(/commit beats feint/i, 'Commit beats Feint')
+      .replace(/feint beats windUp/i, 'Feint beats WindUp')
+      .replace(/commit beats windUp/i, 'Commit beats WindUp')
+      .replace(/draw/i, 'Draw');
+    return `[${formatted}]`;
+  }
+
+  private startCountdown(): void {
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+    }
+
+    const timerElement = document.getElementById('countdown-timer');
+    if (!timerElement) return;
+
+    timerElement.style.display = 'block';
+
+    const updateTimer = () => {
+      if (!this.windowEndMs) {
+        if (timerElement) timerElement.style.display = 'none';
+        return;
+      }
+
+      const remaining = Math.max(0, this.windowEndMs - Date.now());
+      const seconds = Math.ceil(remaining / 1000);
+
+      if (timerElement) {
+        timerElement.textContent = `Window: ${seconds}s`;
+        if (seconds === 0) {
+          timerElement.style.display = 'none';
+        }
+      }
+
+      if (remaining <= 0) {
+        this.stopCountdown();
+      }
+    };
+
+    updateTimer();
+    this.countdownInterval = window.setInterval(updateTimer, 100);
+  }
+
+  private stopCountdown(): void {
+    if (this.countdownInterval) {
+      clearInterval(this.countdownInterval);
+      this.countdownInterval = null;
+    }
+    this.windowEndMs = null;
+    const timerElement = document.getElementById('countdown-timer');
+    if (timerElement) {
+      timerElement.style.display = 'none';
     }
   }
 

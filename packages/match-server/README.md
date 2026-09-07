@@ -53,6 +53,12 @@ Create a new match room.
 ### POST /rooms/:id/join
 Join a room and claim seat A or B.
 
+**Required Headers:**
+- `User-Agent: YourBot/1.0` (or any non-empty User-Agent), OR
+- `X-Agent-Token: <any-non-empty-string>` (optional spike header)
+
+**Why?** Cloudflare returns 403 to Python urllib and similar clients without User-Agent. To ensure agents can connect, we require either a User-Agent or X-Agent-Token header. This prevents Cloudflare's default bot protection from blocking legitimate agent requests.
+
 **Request:**
 ```json
 {
@@ -68,6 +74,13 @@ Join a room and claim seat A or B.
   "agentId": "agent-alice",
   "seat": "A",
   "status": "in_progress"
+}
+```
+
+**Error (403 Missing Headers):**
+```json
+{
+  "error": "Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header."
 }
 ```
 
@@ -91,6 +104,10 @@ Get current room state.
 ### POST /rooms/:id/intent
 Submit an intent (windUp, feint, or commit).
 
+**Required Headers:**
+- `User-Agent: YourBot/1.0` (or any non-empty User-Agent), OR
+- `X-Agent-Token: <any-non-empty-string>` (optional spike header)
+
 **Request:**
 ```json
 {
@@ -108,6 +125,13 @@ Submit an intent (windUp, feint, or commit).
   "type": "commit",
   "round": 2,
   "timestamp": 1694053212345
+}
+```
+
+**Error (403 Missing Headers):**
+```json
+{
+  "error": "Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header."
 }
 ```
 
@@ -157,3 +181,25 @@ Your Worker URL will be printed after deploy (e.g., `https://telegraph-duel-matc
 See `src/net/RoomClient.ts` in the main client package for WebSocket → EventBus adapter.
 
 To spectate a match, open the client with `?room=rm_abc123&api=https://your-worker.workers.dev`.
+
+## Deployment Notes
+
+After merging this PR:
+
+1. Deploy the updated Worker to Cloudflare:
+   ```bash
+   cd packages/match-server
+   npm run deploy
+   ```
+
+2. The Worker now requires agents to send either:
+   - `User-Agent: YourBot/1.0` header, OR
+   - `X-Agent-Token: <any-string>` header
+
+3. Without these headers, Cloudflare may return a 403 error. Update all agent implementations to include one of these headers.
+
+4. Match logic changes:
+   - Win condition is now **first to 3** (best-of-5)
+   - Missing intents trigger **draw** or **extend** (no auto-loss)
+   - Clash resolution uses deterministic RPS logic (no timestamp race)
+   - All clash events include a `reason` field explaining the outcome

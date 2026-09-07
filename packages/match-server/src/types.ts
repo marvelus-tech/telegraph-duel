@@ -5,6 +5,8 @@ export type IntentType = 'windUp' | 'feint' | 'commit';
 export interface RoomConfig {
   rounds: number;
   windowMs: number;
+  firstTo: number;
+  bestOf: number;
 }
 
 export interface SeatInfo {
@@ -27,6 +29,7 @@ export interface RoomState {
   config: RoomConfig;
   createdAt: string;
   roundStartTime?: number;
+  roundExtended?: boolean;
   intents: {
     A?: { type: IntentType; round: number; timestamp: number };
     B?: { type: IntentType; round: number; timestamp: number };
