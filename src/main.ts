@@ -2,6 +2,8 @@ import Phaser from 'phaser';
 import { DuelScene } from './game/DuelScene';
 import { HUDController } from './ui/HUDController';
 import { RoomClient } from './net/RoomClient';
+import { ScoreSettledAdapter } from './net/ScoreSettledAdapter';
+import type { ScoreSettledPayload } from './net/ScoreSettledAdapter';
 import './style.css';
 
 // Parse URL parameters for room spectator mode
@@ -39,6 +41,14 @@ const config: Phaser.Types.Core.GameConfig = {
 
 // Initialize game
 const game = new Phaser.Game(config);
+
+// Initialize ScoreSettledAdapter to listen for postMessages from Dex bridge
+ScoreSettledAdapter.listenForPostMessages();
+
+// Expose fixture helper for E2E / console testing
+(window as any).__emitScoreSettled = (payload: ScoreSettledPayload) => {
+  ScoreSettledAdapter.emitSettlement(payload);
+};
 
 // Initialize HUD
 const hudElement = document.getElementById('hud');
