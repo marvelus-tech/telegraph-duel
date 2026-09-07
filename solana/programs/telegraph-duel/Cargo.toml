@@ -1,0 +1,20 @@
+[package]
+name = "telegraph-duel"
+version = "0.1.0"
+description = "Telegraph Duel - Stake-free match settlement with session keys"
+edition = "2021"
+
+[lib]
+crate-type = ["cdylib", "lib"]
+name = "telegraph_duel"
+
+[features]
+no-entrypoint = []
+no-idl = []
+no-log-ix-name = []
+cpi = ["no-entrypoint"]
+default = []
+
+[dependencies]
+anchor-lang = "0.30.1"
+anchor-spl = "0.30.1"
