@@ -299,11 +299,15 @@ Using test fixture (no live API call)
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
   📊 score.settled Event Received
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-Match ID:    rm_test_fixture_001
 Room ID:     rm_test_fixture_001
+Match ID:    rm_test_fixture_001
+Winner:      alice (seat A)
 Scores:      alice (3) vs bob (2)
+Wallets:
+  A: 3K9Y...
+  B: 5J7X...
 Last Clash:  windUp_beats_feint
-TX:          4xT9...
+TX Sig:      4xT9...
 Score PDAs:
   A: FsQ8...
   B: 2mK4...
@@ -485,34 +489,51 @@ Before considering E2E complete, verify:
 
 ### `score.settled`
 
-Emitted after successful settlement:
+Emitted after successful settlement. **Flat structure** aligned with Sega EventBus + HUD consumer contract:
 
 ```typescript
 {
   type: 'score.settled',
-  data: {
-    matchId: string,           // Room ID
-    roomId: string,            // Same as matchId
-    scores: {
-      A: number,               // Seat A final score
-      B: number                // Seat B final score
-    },
-    agentIds: {
-      A: string,               // Seat A agent ID
-      B: string                // Seat B agent ID
-    },
-    lastClash?: {
-      reason: string           // Last clash reason (e.g., "windUp_beats_feint")
-    },
-    txSignature: string,       // Solana transaction signature
-    scorePDAs: {
-      A: string,               // Seat A score PDA address
-      B: string                // Seat B score PDA address
-    }
+  payload: {
+    roomId: string,           // Room ID from match-server
+    matchId: string,          // Match ID (same as roomId)
+    winnerAgentId: string,    // Winning agent ID
+    winnerSeat: 'A' | 'B',    // Winning seat
+    finalScoresA: number,     // Seat A final score
+    finalScoresB: number,     // Seat B final score
+    agentIdA: string,         // Seat A agent ID
+    agentIdB: string,         // Seat B agent ID
+    walletA: string,          // Seat A wallet address (base58)
+    walletB: string,          // Seat B wallet address (base58)
+    scorePdaA: string,        // Seat A score PDA address (base58)
+    scorePdaB: string,        // Seat B score PDA address (base58)
+    txSig: string,            // Solana transaction signature
+    lastClashReason?: string  // Optional last clash reason (e.g., "windUp_beats_feint")
   },
-  timestamp: number            // Unix ms
+  timestamp: number           // Unix ms
 }
 ```
+
+**Tie policy:** If `finalScoresA` equals `finalScoresB` (rare case), `winnerSeat` defaults to `'A'`. In practice, match-server uses first-to-N logic which prevents ties.
+
+### Canonical Worker Event Format
+
+The bridge accepts the canonical `match:end` event from the Sega Worker:
+
+```typescript
+{
+  type: 'match:end',
+  payload: {
+    winner: string,           // Agent ID of winner
+    finalScoresA: number,     // Seat A final score
+    finalScoresB: number,     // Seat B final score
+    reason: string            // e.g., "first_to_3_complete"
+  },
+  timestamp: number
+}
+```
+
+The bridge also accepts room state from `GET /rooms/:id` which uses `scores.A` / `scores.B` format.
 
 ## Agent ID → Wallet Mapping
 

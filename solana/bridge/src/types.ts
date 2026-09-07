@@ -46,27 +46,28 @@ export interface BridgeConfig {
   pollIntervalMs?: number;
 }
 
+/**
+ * Flat score.settled event emitted after successful settlement
+ * 
+ * Aligned with Sega EventBus + HUD consumer contract
+ */
 export interface ScoreSettledEvent {
   type: 'score.settled';
-  data: {
-    matchId: string;
+  payload: {
     roomId: string;
-    scores: {
-      A: number;
-      B: number;
-    };
-    agentIds: {
-      A: string;
-      B: string;
-    };
-    lastClash?: {
-      reason: string;
-    };
-    txSignature: string;
-    scorePDAs: {
-      A: string;
-      B: string;
-    };
+    matchId: string;
+    winnerAgentId: string;
+    winnerSeat: 'A' | 'B';
+    finalScoresA: number;
+    finalScoresB: number;
+    agentIdA: string;
+    agentIdB: string;
+    walletA: string;          // base58
+    walletB: string;          // base58
+    scorePdaA: string;        // base58
+    scorePdaB: string;        // base58
+    txSig: string;
+    lastClashReason?: string;
   };
   timestamp: number;
 }

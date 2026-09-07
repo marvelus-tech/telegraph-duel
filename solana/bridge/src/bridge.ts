@@ -7,6 +7,7 @@ import type {
   ScoreSettledEvent,
   SettlementResult,
 } from './types.js';
+import { normalizeScores, determineWinner } from './event-types.js';
 
 /**
  * Match Server to Solana Bridge
@@ -173,28 +174,27 @@ export class MatchServerBridge {
         this.config.programId
       )[0];
 
-      // Emit score.settled event
+      // Determine winner
+      const winner = determineWinner(scores, { A: agentIdA, B: agentIdB });
+
+      // Emit score.settled event (flat structure per Sega contract)
       const event: ScoreSettledEvent = {
         type: 'score.settled',
-        data: {
-          matchId: roomId,
+        payload: {
           roomId,
-          scores: {
-            A: scores.A,
-            B: scores.B,
-          },
-          agentIds: {
-            A: agentIdA,
-            B: agentIdB,
-          },
-          lastClash: roomState.lastClash ? {
-            reason: roomState.lastClash.reason,
-          } : undefined,
-          txSignature,
-          scorePDAs: {
-            A: scorePdaA.toBase58(),
-            B: scorePdaB.toBase58(),
-          },
+          matchId: roomId,
+          winnerAgentId: winner.agentId,
+          winnerSeat: winner.seat,
+          finalScoresA: scores.A,
+          finalScoresB: scores.B,
+          agentIdA,
+          agentIdB,
+          walletA: walletA.toBase58(),
+          walletB: walletB.toBase58(),
+          scorePdaA: scorePdaA.toBase58(),
+          scorePdaB: scorePdaB.toBase58(),
+          txSig: txSignature,
+          lastClashReason: roomState.lastClash?.reason,
         },
         timestamp: Date.now(),
       };

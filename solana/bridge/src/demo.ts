@@ -102,15 +102,16 @@ async function main() {
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  📊 Score Settled Event');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`Room ID: ${event.data.roomId}`);
-    console.log(`Scores: ${event.data.agentIds.A} (${event.data.scores.A}) vs ${event.data.agentIds.B} (${event.data.scores.B})`);
-    if (event.data.lastClash) {
-      console.log(`Last Clash: ${event.data.lastClash.reason}`);
+    console.log(`Room ID: ${event.payload.roomId}`);
+    console.log(`Winner: ${event.payload.winnerAgentId} (seat ${event.payload.winnerSeat})`);
+    console.log(`Scores: ${event.payload.agentIdA} (${event.payload.finalScoresA}) vs ${event.payload.agentIdB} (${event.payload.finalScoresB})`);
+    if (event.payload.lastClashReason) {
+      console.log(`Last Clash: ${event.payload.lastClashReason}`);
     }
-    console.log(`TX Signature: ${event.data.txSignature}`);
+    console.log(`TX Sig: ${event.payload.txSig}`);
     console.log(`Score PDAs:`);
-    console.log(`  A: ${event.data.scorePDAs.A}`);
-    console.log(`  B: ${event.data.scorePDAs.B}`);
+    console.log(`  A: ${event.payload.scorePdaA}`);
+    console.log(`  B: ${event.payload.scorePdaB}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   });
 

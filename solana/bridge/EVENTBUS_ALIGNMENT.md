@@ -53,35 +53,31 @@ This document explains how the bridge's `score.settled` event relates to the gam
 
 **Source:** `solana/bridge/src/bridge.ts`
 
-**Schema:**
+**Schema (Flat structure per Sega contract):**
 ```typescript
 {
   type: 'score.settled',
-  data: {
-    matchId: string,
+  payload: {
     roomId: string,
-    scores: {
-      A: number,
-      B: number
-    },
-    agentIds: {
-      A: string,
-      B: string
-    },
-    lastClash?: {
-      reason: string
-    },
-    txSignature: string,
-    scorePDAs: {
-      A: string,
-      B: string
-    }
+    matchId: string,
+    winnerAgentId: string,
+    winnerSeat: 'A' | 'B',
+    finalScoresA: number,
+    finalScoresB: number,
+    agentIdA: string,
+    agentIdB: string,
+    walletA: string,
+    walletB: string,
+    scorePdaA: string,
+    scorePdaB: string,
+    txSig: string,
+    lastClashReason?: string
   },
   timestamp: number
 }
 ```
 
-**Usage:** Emitted after successful on-chain settlement.
+**Usage:** Emitted after successful on-chain settlement. Flat structure aligns with Sega EventBus + HUD consumer.
 
 ## Key Differences
 
