@@ -96,16 +96,20 @@ async function main() {
     console.log('\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
     console.log('  📊 score.settled Event Received');
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━');
-    console.log(`Match ID:    ${event.data.matchId}`);
-    console.log(`Room ID:     ${event.data.roomId}`);
-    console.log(`Scores:      ${event.data.agentIds.A} (${event.data.scores.A}) vs ${event.data.agentIds.B} (${event.data.scores.B})`);
-    if (event.data.lastClash) {
-      console.log(`Last Clash:  ${event.data.lastClash.reason}`);
+    console.log(`Room ID:     ${event.payload.roomId}`);
+    console.log(`Match ID:    ${event.payload.matchId}`);
+    console.log(`Winner:      ${event.payload.winnerAgentId} (seat ${event.payload.winnerSeat})`);
+    console.log(`Scores:      ${event.payload.agentIdA} (${event.payload.finalScoresA}) vs ${event.payload.agentIdB} (${event.payload.finalScoresB})`);
+    console.log(`Wallets:`);
+    console.log(`  A: ${event.payload.walletA}`);
+    console.log(`  B: ${event.payload.walletB}`);
+    if (event.payload.lastClashReason) {
+      console.log(`Last Clash:  ${event.payload.lastClashReason}`);
     }
-    console.log(`TX:          ${event.data.txSignature}`);
+    console.log(`TX Sig:      ${event.payload.txSig}`);
     console.log(`Score PDAs:`);
-    console.log(`  A: ${event.data.scorePDAs.A}`);
-    console.log(`  B: ${event.data.scorePDAs.B}`);
+    console.log(`  A: ${event.payload.scorePdaA}`);
+    console.log(`  B: ${event.payload.scorePdaB}`);
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   });
   
@@ -155,30 +159,39 @@ async function main() {
   console.log('🔍 Step 7: Verify score PDAs on-chain');
   console.log('─────────────────────────────────────');
   
-  if (result.scorePDAs) {
-    const pdaA = new PublicKey(result.scorePDAs.A);
-    const pdaB = new PublicKey(result.scorePDAs.B);
-    
-    try {
-      const accountA = await connection.getAccountInfo(pdaA);
-      const accountB = await connection.getAccountInfo(pdaB);
+  // Get PDAs from the event that was emitted
+  let scorePdaA: string | undefined;
+  let scorePdaB: string | undefined;
+  
+  if (eventReceived && result.success) {
+    // PDAs are in the event payload - we'll use result.scorePDAs for backwards compatibility
+    if (result.scorePDAs) {
+      const pdaA = new PublicKey(result.scorePDAs.A);
+      const pdaB = new PublicKey(result.scorePDAs.B);
       
-      if (accountA) {
-        console.log(`✓ Score PDA A exists: ${pdaA.toBase58()}`);
-        console.log(`  Size: ${accountA.data.length} bytes`);
-      } else {
-        console.log(`✗ Score PDA A not found: ${pdaA.toBase58()}`);
-      }
+      try {
+        const accountA = await connection.getAccountInfo(pdaA);
+        const accountB = await connection.getAccountInfo(pdaB);
       
-      if (accountB) {
-        console.log(`✓ Score PDA B exists: ${pdaB.toBase58()}`);
-        console.log(`  Size: ${accountB.data.length} bytes`);
-      } else {
-        console.log(`✗ Score PDA B not found: ${pdaB.toBase58()}`);
+        if (accountA) {
+          console.log(`✓ Score PDA A exists: ${pdaA.toBase58()}`);
+          console.log(`  Size: ${accountA.data.length} bytes`);
+        } else {
+          console.log(`✗ Score PDA A not found: ${pdaA.toBase58()}`);
+        }
+        
+        if (accountB) {
+          console.log(`✓ Score PDA B exists: ${pdaB.toBase58()}`);
+          console.log(`  Size: ${accountB.data.length} bytes`);
+        } else {
+          console.log(`✗ Score PDA B not found: ${pdaB.toBase58()}`);
+        }
+      } catch (error) {
+        console.error('✗ Error fetching PDAs:', error);
       }
-    } catch (error) {
-      console.error('✗ Error fetching PDAs:', error);
     }
+  } else {
+    console.log('⚠️  Cannot verify PDAs (no event received or settlement failed)');
   }
   console.log();
 
