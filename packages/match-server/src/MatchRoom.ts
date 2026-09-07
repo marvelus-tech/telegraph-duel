@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig } from './types';
+import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig, ClashResult } from './types';
 
 const DEFAULT_ROUNDS = 5;
 const DEFAULT_WINDOW_MS = 5000;
@@ -14,6 +14,7 @@ export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
   private sessions: Set<WebSocket> = new Set();
   private roundTimer: number | null = null;
+  private clashResolvedForRound: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -215,13 +216,20 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     });
 
-    return new Response(JSON.stringify({
+    const response: Record<string, unknown> = {
       accepted: true,
       agentId: intent.agentId,
       type: intent.type,
       round: intent.round,
       timestamp: Date.now(),
-    }), {
+    };
+
+    // Optionally include lastClash if one just happened
+    if (this.state.lastClash) {
+      response.lastClash = this.state.lastClash;
+    }
+
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -245,6 +253,7 @@ export class MatchRoom extends DurableObject {
       },
       createdAt: new Date().toISOString(),
       intents: {},
+      history: [],
     };
     await this.saveState();
   }
@@ -275,7 +284,12 @@ export class MatchRoom extends DurableObject {
   private startRound(): void {
     if (!this.state) return;
 
-    if (this.state.scores.A >= 3 || this.state.scores.B >= 3) {
+    const firstTo = Math.ceil(this.state.config.rounds / 2);
+    
+    // Cap: don't start new round if already hit firstTo OR exceeded bestOf
+    if (this.state.currentRound >= this.state.config.rounds ||
+        this.state.scores.A >= firstTo || 
+        this.state.scores.B >= firstTo) {
       this.endMatch();
       return;
     }
@@ -283,6 +297,7 @@ export class MatchRoom extends DurableObject {
     this.state.currentRound++;
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
+    this.clashResolvedForRound = null;
 
     this.saveState();
 
@@ -310,7 +325,12 @@ export class MatchRoom extends DurableObject {
       });
     }, 200);
 
-    setTimeout(() => {
+    // Clear any existing timer before scheduling new one
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+    }
+
+    this.roundTimer = setTimeout(() => {
       this.broadcast({
         type: 'round:windowClose',
         payload: {
@@ -320,40 +340,84 @@ export class MatchRoom extends DurableObject {
         timestamp: Date.now(),
       });
       this.resolveClash();
-    }, this.state.config.windowMs);
+    }, this.state.config.windowMs) as unknown as number;
   }
 
   private resolveClash(): void {
     if (!this.state) return;
 
+    // Prevent double resolve for same round
+    if (this.clashResolvedForRound === this.state.currentRound) {
+      return;
+    }
+    this.clashResolvedForRound = this.state.currentRound;
+
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
 
     let winner: Seat | null = null;
+    let reason = 'unknown';
 
     if (!intentA && !intentB) {
       winner = Math.random() < 0.5 ? 'A' : 'B';
+      reason = 'both_timeout';
     } else if (!intentA) {
       winner = 'B';
+      reason = 'opponent_timeout';
     } else if (!intentB) {
       winner = 'A';
+      reason = 'opponent_timeout';
     } else {
-      const timeA = intentA.timestamp + (intentA.type === 'feint' ? 100 : 0);
-      const timeB = intentB.timestamp + (intentB.type === 'feint' ? 100 : 0);
-
+      // Both submitted intents - apply stance matrix with timing
       if (intentA.type === 'commit' && intentB.type === 'feint') {
-        winner = 'A';
+        // Check if feint was submitted AFTER commit (baited early commit)
+        if (intentB.timestamp > intentA.timestamp) {
+          winner = 'B';
+          reason = 'feint_punish_early_commit';
+        } else {
+          winner = 'A';
+          reason = 'commit_beats_feint';
+        }
       } else if (intentA.type === 'feint' && intentB.type === 'commit') {
-        winner = 'B';
+        // Check if feint was submitted AFTER commit (baited early commit)
+        if (intentA.timestamp > intentB.timestamp) {
+          winner = 'A';
+          reason = 'feint_punish_early_commit';
+        } else {
+          winner = 'B';
+          reason = 'commit_beats_feint';
+        }
       } else if (intentA.type === 'commit' && intentB.type === 'commit') {
-        winner = timeA < timeB ? 'A' : 'B';
+        winner = intentA.timestamp < intentB.timestamp ? 'A' : 'B';
+        reason = 'commit_vs_commit_first_wins';
+      } else if (intentA.type === 'windUp' && intentB.type === 'commit') {
+        winner = 'B';
+        reason = 'commit_beats_windUp';
+      } else if (intentA.type === 'commit' && intentB.type === 'windUp') {
+        winner = 'A';
+        reason = 'commit_beats_windUp';
       } else {
+        // windUp vs windUp, feint vs feint, or other combos - random
         winner = Math.random() < 0.5 ? 'A' : 'B';
+        reason = 'mirror_or_random';
       }
     }
 
     const loser: Seat = winner === 'A' ? 'B' : 'A';
     this.state.scores[winner]++;
+
+    // Record clash result
+    const clashResult: ClashResult = {
+      round: this.state.currentRound,
+      winner,
+      loser,
+      reason,
+      stanceA: intentA?.type || null,
+      stanceB: intentB?.type || null,
+    };
+
+    this.state.lastClash = clashResult;
+    this.state.history.push(clashResult);
 
     this.saveState();
 
@@ -366,6 +430,7 @@ export class MatchRoom extends DurableObject {
         winner: this.state.seats[winner]?.agentId,
         loser: this.state.seats[loser]?.agentId,
         outcome: winner,
+        reason,
         damage: 1,
         winnerScore: this.state.scores[winner],
         loserScore: this.state.scores[loser],
@@ -390,7 +455,14 @@ export class MatchRoom extends DurableObject {
   private endMatch(): void {
     if (!this.state) return;
 
-    const winner = this.state.scores.A >= 3 ? 'A' : 'B';
+    // Clear any pending timers
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = null;
+    }
+
+    const firstTo = Math.ceil(this.state.config.rounds / 2);
+    const winner = this.state.scores.A >= firstTo ? 'A' : 'B';
     const loser = winner === 'A' ? 'B' : 'A';
 
     this.broadcast({
@@ -399,7 +471,7 @@ export class MatchRoom extends DurableObject {
         winner: this.state.seats[winner]?.agentId,
         finalScoresA: this.state.scores.A,
         finalScoresB: this.state.scores.B,
-        reason: 'best_of_5_complete',
+        reason: `best_of_${this.state.config.rounds}_complete`,
       },
       timestamp: Date.now(),
     });

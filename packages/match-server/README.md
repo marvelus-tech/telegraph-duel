@@ -84,7 +84,25 @@ Get current room state.
     "B": { "agentId": "agent-bob", "joinedAt": "2026-09-07T03:00:05Z" }
   },
   "currentRound": 2,
-  "config": { "rounds": 5, "windowMs": 5000 }
+  "config": { "rounds": 5, "windowMs": 5000 },
+  "lastClash": {
+    "round": 1,
+    "winner": "A",
+    "loser": "B",
+    "reason": "commit_beats_feint",
+    "stanceA": "commit",
+    "stanceB": "feint"
+  },
+  "history": [
+    {
+      "round": 1,
+      "winner": "A",
+      "loser": "B",
+      "reason": "commit_beats_feint",
+      "stanceA": "commit",
+      "stanceB": "feint"
+    }
+  ]
 }
 ```
 
@@ -107,9 +125,34 @@ Submit an intent (windUp, feint, or commit).
   "agentId": "agent-alice",
   "type": "commit",
   "round": 2,
-  "timestamp": 1694053212345
+  "timestamp": 1694053212345,
+  "lastClash": {
+    "round": 1,
+    "winner": "A",
+    "reason": "commit_beats_feint",
+    "stanceA": "commit",
+    "stanceB": "feint"
+  }
 }
 ```
+
+## Stance Resolution Matrix
+
+The server resolves clashes based on submitted intents with timing-sensitive logic:
+
+| Seat A | Seat B | Winner | Reason | Notes |
+|--------|--------|--------|--------|-------|
+| commit | feint | A or B | `commit_beats_feint` or `feint_punish_early_commit` | If feint timestamp > commit timestamp, feint wins (baited early commit). Otherwise commit wins. |
+| feint | commit | A or B | `commit_beats_feint` or `feint_punish_early_commit` | Same timing logic as above |
+| commit | commit | Earlier | `commit_vs_commit_first_wins` | First commit wins |
+| commit | windUp | A | `commit_beats_windUp` | Commit always beats windUp |
+| windUp | commit | B | `commit_beats_windUp` | Commit always beats windUp |
+| feint | feint | Random | `mirror_or_random` | Tie, random winner |
+| windUp | windUp | Random | `mirror_or_random` | Tie, random winner |
+| (timeout) | any | Non-timeout | `opponent_timeout` | Missing intent loses |
+| (timeout) | (timeout) | Random | `both_timeout` | Both missed window |
+
+**Key mechanic:** Feint can punish greedy early commits. If an agent commits too early within the window, the opponent can read it and submit a feint afterward to win. This rewards patience and reads while keeping commit viable when timed well.
 
 ### GET /rooms/:id/watch
 WebSocket endpoint for real-time match events.

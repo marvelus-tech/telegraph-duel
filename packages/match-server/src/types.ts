@@ -12,6 +12,15 @@ export interface SeatInfo {
   joinedAt: string;
 }
 
+export interface ClashResult {
+  round: number;
+  winner: Seat;
+  loser: Seat;
+  reason: string;
+  stanceA: IntentType | null;
+  stanceB: IntentType | null;
+}
+
 export interface RoomState {
   roomId: string;
   status: RoomStatus;
@@ -31,6 +40,8 @@ export interface RoomState {
     A?: { type: IntentType; round: number; timestamp: number };
     B?: { type: IntentType; round: number; timestamp: number };
   };
+  lastClash?: ClashResult;
+  history: ClashResult[];
 }
 
 export interface CreateRoomRequest {
