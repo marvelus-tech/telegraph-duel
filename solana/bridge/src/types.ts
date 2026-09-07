@@ -44,6 +44,7 @@ export interface BridgeConfig {
   feePayerKeypair: any; // Keypair from @solana/web3.js
   programId: PublicKey;
   pollIntervalMs?: number;
+  publishSettlementEvents?: boolean; // Enable POST to match-server after settlement
 }
 
 /**

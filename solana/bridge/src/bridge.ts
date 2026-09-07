@@ -58,6 +58,36 @@ export class MatchServerBridge {
   }
 
   /**
+   * Publish settlement event to match-server Worker for WS broadcast
+   * Fails soft - logs error but doesn't throw (settlement still succeeds)
+   */
+  private async publishSettlementEvent(roomId: string, event: ScoreSettledEvent): Promise<void> {
+    try {
+      const url = `${this.config.matchServerUrl}/rooms/${roomId}/score-settled`;
+      
+      console.log(`[Bridge] Publishing settlement to ${url}`);
+      
+      const response = await fetch(url, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(event.payload), // flat payload (Worker wraps for WS)
+      });
+
+      if (!response.ok) {
+        const text = await response.text();
+        console.warn(`[Bridge] Failed to publish settlement (HTTP ${response.status}): ${text}`);
+        return;
+      }
+
+      console.log(`[Bridge] ✓ Settlement published to match-server`);
+    } catch (error) {
+      console.warn('[Bridge] Failed to publish settlement to match-server:', error);
+    }
+  }
+
+  /**
    * Fetch room state from match-server
    */
   async fetchRoomState(roomId: string): Promise<MatchServerRoomState | null> {
@@ -201,6 +231,11 @@ export class MatchServerBridge {
       };
 
       this.emit(event);
+
+      // Publish settlement event to match-server (if enabled)
+      if (this.config.publishSettlementEvents) {
+        await this.publishSettlementEvent(roomId, event);
+      }
 
       return {
         success: true,

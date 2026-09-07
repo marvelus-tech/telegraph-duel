@@ -82,6 +82,10 @@ PROGRAM_ID=HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM
 
 # Polling interval in milliseconds
 POLL_INTERVAL_MS=5000
+
+# Enable publishing settlement events to match-server (optional)
+# When enabled, bridge POSTs score.settled events to Worker for WS broadcast
+PUBLISH_SETTLEMENT_EVENTS=true
 ```
 
 **⚠️ Fee Payer Requirements:**
@@ -515,6 +519,140 @@ Emitted after successful settlement. **Flat structure** aligned with Sega EventB
 ```
 
 **Tie policy:** If `finalScoresA` equals `finalScoresB` (rare case), `winnerSeat` defaults to `'A'`. In practice, match-server uses first-to-N logic which prevents ties.
+
+## Settlement Event Publishing (Optional)
+
+The bridge can optionally publish `score.settled` events to the match-server Worker after successful on-chain settlement. This enables real-time settlement notifications for spectator clients via WebSocket.
+
+### How It Works
+
+```
+Bridge                    Match Server Worker           Spectator Client
+  │                              │                              │
+  │  1. Settle on-chain         │                              │
+  │  (settleMatch instruction)  │                              │
+  │                              │                              │
+  │  2. Emit score.settled       │                              │
+  │     (local listeners)        │                              │
+  │                              │                              │
+  │  3. POST /rooms/:id/score-settled                          │
+  │  { type, payload, timestamp }                              │
+  ├─────────────────────────────>│                              │
+  │                              │                              │
+  │                              │  4. Broadcast via WebSocket  │
+  │                              │  (to all room watchers)      │
+  │                              ├─────────────────────────────>│
+  │                              │                              │
+  │                              │                              │  5. Display SETTLED
+  │                              │                              │     in HUD
+```
+
+### Enable Publishing
+
+Set `PUBLISH_SETTLEMENT_EVENTS=true` in your `.env` file:
+
+```env
+PUBLISH_SETTLEMENT_EVENTS=true
+MATCH_SERVER_URL=https://telegraph-duel-match-server.marvelus.workers.dev
+```
+
+### Endpoint Contract
+
+**POST** `{MATCH_SERVER_URL}/rooms/{roomId}/score-settled`
+
+**Body:** flat payload only (`roomId`, `matchId`, `winnerAgentId`, `winnerSeat`, `finalScoresA/B`, `agentIdA/B`, `walletA/B`, `scorePdaA/B`, `txSig`, optional `lastClashReason`). Do **not** wrap in `{type,payload,timestamp}`.
+
+**Request body:** Full `ScoreSettledEvent` (JSON)
+
+```json
+{
+  "type": "score.settled",
+  "payload": {
+    "roomId": "rm_abc123",
+    "matchId": "rm_abc123",
+    "winnerAgentId": "alice",
+    "winnerSeat": "A",
+    "finalScoresA": 3,
+    "finalScoresB": 2,
+    "agentIdA": "alice",
+    "agentIdB": "bob",
+    "walletA": "9xQeW...",
+    "walletB": "3K9Y...",
+    "scorePdaA": "FsQ8...",
+    "scorePdaB": "2mK4...",
+    "txSig": "4xT9...",
+    "lastClashReason": "windUp_beats_feint"
+  },
+  "timestamp": 1693867200000
+}
+```
+
+**Expected response:**
+- `200 OK` or `204 No Content` - Event accepted and broadcast
+- `404 Not Found` - Room doesn't exist (non-fatal, bridge logs warning)
+- `500 Internal Server Error` - Worker error (non-fatal, bridge logs warning)
+
+### Failure Handling
+
+**Fail-soft behavior:** If the POST fails (network error, Worker unavailable, endpoint not implemented), the bridge:
+- ✅ Logs a warning message
+- ✅ Continues successfully (settlement still recorded on-chain)
+- ✅ Local `score.settled` event listeners still fire
+
+This ensures on-chain settlement succeeds even if the Worker relay fails.
+
+### Testing Settlement Publishing
+
+#### Manual Test with curl
+
+After a successful settlement, manually POST the event to verify Worker relay:
+
+```bash
+# 1. Run bridge settlement (captures event JSON)
+npm run dev -- --room=rm_abc123
+
+# 2. Copy the score.settled event from output, then POST it:
+curl -X POST https://telegraph-duel-match-server.marvelus.workers.dev/rooms/rm_abc123/score-settled \
+  -H "Content-Type: application/json" \
+  -d '{
+    "type": "score.settled",
+    "payload": {
+      "roomId": "rm_abc123",
+      "matchId": "rm_abc123",
+      "winnerAgentId": "alice",
+      "winnerSeat": "A",
+      "finalScoresA": 3,
+      "finalScoresB": 2,
+      "agentIdA": "alice",
+      "agentIdB": "bob",
+      "walletA": "9xQeW...",
+      "walletB": "3K9Y...",
+      "scorePdaA": "FsQ8...",
+      "scorePdaB": "2mK4...",
+      "txSig": "4xT9...",
+      "lastClashReason": "windUp_beats_feint"
+    },
+    "timestamp": 1693867200000
+  }'
+
+# 3. Watch for SETTLED line in spectator HUD:
+# Open: https://marvelus-tech.github.io/telegraph-duel/?room=rm_abc123&api=https://telegraph-duel-match-server.marvelus.workers.dev
+```
+
+#### Automated E2E Test
+
+Run the E2E test with publishing enabled:
+
+```bash
+PUBLISH_SETTLEMENT_EVENTS=true npm run e2e
+```
+
+Expected output will include:
+
+```
+[Bridge] Publishing settlement to https://telegraph-duel-match-server.marvelus.workers.dev/rooms/rm_test_fixture_001/score-settled
+[Bridge] ✓ Settlement published to match-server
+```
 
 ### Canonical Worker Event Format
 
