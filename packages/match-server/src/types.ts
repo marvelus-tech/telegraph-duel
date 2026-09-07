@@ -39,6 +39,7 @@ export interface RoomState {
   createdAt: string;
   roundStartTime?: number;
   roundExtended?: boolean;
+  clashResolvedForRound?: number;
   intents: {
     A?: { type: IntentType; round: number; timestamp: number };
     B?: { type: IntentType; round: number; timestamp: number };
