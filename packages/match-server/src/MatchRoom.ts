@@ -233,6 +233,18 @@ export class MatchRoom extends DurableObject {
 
     await this.saveState();
 
+    if (
+      this.state.intents.A &&
+      this.state.intents.B &&
+      this.state.clashResolvedForRound !== this.state.currentRound
+    ) {
+      if (this.roundTimer !== null) {
+        clearTimeout(this.roundTimer);
+        this.roundTimer = null;
+      }
+      this.resolveClash();
+    }
+
     this.broadcast({
       type: `agent:${intent.type}`,
       payload: {
@@ -324,7 +336,6 @@ export class MatchRoom extends DurableObject {
     this.state.intents = {};
     this.state.roundExtended = false;
     this.state.roundStartTime = Date.now();
-    this.clashResolvedForRound = null;
 
     this.saveState();
 
@@ -375,7 +386,7 @@ export class MatchRoom extends DurableObject {
     if (!this.state) return;
 
     // Early exit if already resolved for this round
-    if (this.clashResolvedForRound === this.state.currentRound) {
+    if (this.state.clashResolvedForRound === this.state.currentRound) {
       return;
     }
 
@@ -420,7 +431,7 @@ export class MatchRoom extends DurableObject {
     if (!this.state) return;
 
     // NOW set the flag - only when actually finalizing
-    this.clashResolvedForRound = this.state.currentRound;
+    this.state.clashResolvedForRound = this.state.currentRound;
 
     if (!intentA || !intentB) {
       // Should not happen here, but handle defensively
