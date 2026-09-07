@@ -560,6 +560,8 @@ MATCH_SERVER_URL=https://telegraph-duel-match-server.marvelus.workers.dev
 
 **POST** `{MATCH_SERVER_URL}/rooms/{roomId}/score-settled`
 
+**Body:** flat payload only (`roomId`, `matchId`, `winnerAgentId`, `winnerSeat`, `finalScoresA/B`, `agentIdA/B`, `walletA/B`, `scorePdaA/B`, `txSig`, optional `lastClashReason`). Do **not** wrap in `{type,payload,timestamp}`.
+
 **Request body:** Full `ScoreSettledEvent` (JSON)
 
 ```json
