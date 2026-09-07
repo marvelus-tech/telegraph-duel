@@ -1,5 +1,5 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig } from './types';
+import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig, ClashResult } from './types';
 
 const DEFAULT_ROUNDS = 5;
 const DEFAULT_WINDOW_MS = 5000;
@@ -16,6 +16,7 @@ export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
   private sessions: Set<WebSocket> = new Set();
   private roundTimer: number | null = null;
+  private clashResolvedForRound: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -76,7 +77,7 @@ export class MatchRoom extends DurableObject {
   private validateAgentHeaders(request: Request): boolean {
     const userAgent = request.headers.get('User-Agent');
     const agentToken = request.headers.get('X-Agent-Token');
-    return (userAgent && userAgent.trim().length > 0) || (agentToken && agentToken.trim().length > 0);
+    return !!(userAgent && userAgent.trim().length > 0) || !!(agentToken && agentToken.trim().length > 0);
   }
 
   private async handleInit(request: Request): Promise<Response> {
@@ -242,13 +243,19 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     });
 
-    return new Response(JSON.stringify({
+    const response: Record<string, unknown> = {
       accepted: true,
       agentId: intent.agentId,
       type: intent.type,
       round: intent.round,
       timestamp: Date.now(),
-    }), {
+    };
+
+    if (this.state.lastClash) {
+      response.lastClash = this.state.lastClash;
+    }
+
+    return new Response(JSON.stringify(response), {
       headers: { 'Content-Type': 'application/json' },
     });
   }
@@ -274,6 +281,7 @@ export class MatchRoom extends DurableObject {
       },
       createdAt: new Date().toISOString(),
       intents: {},
+      history: [],
     };
     await this.saveState();
   }
@@ -304,7 +312,10 @@ export class MatchRoom extends DurableObject {
   private startRound(): void {
     if (!this.state) return;
 
-    if (this.state.scores.A >= this.state.config.firstTo || this.state.scores.B >= this.state.config.firstTo) {
+    // Cap: don't start new round if already hit firstTo OR exceeded bestOf
+    if (this.state.scores.A >= this.state.config.firstTo || 
+        this.state.scores.B >= this.state.config.firstTo ||
+        this.state.currentRound >= this.state.config.bestOf) {
       this.endMatch();
       return;
     }
@@ -313,6 +324,7 @@ export class MatchRoom extends DurableObject {
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
     this.state.roundExtended = false;
+    this.clashResolvedForRound = null;
 
     this.saveState();
 
@@ -341,7 +353,12 @@ export class MatchRoom extends DurableObject {
       });
     }, 200);
 
-    setTimeout(() => {
+    // Clear any existing timer before scheduling new one
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+    }
+
+    this.roundTimer = setTimeout(() => {
       this.broadcast({
         type: 'round:windowClose',
         payload: {
@@ -351,18 +368,23 @@ export class MatchRoom extends DurableObject {
         timestamp: Date.now(),
       });
       this.resolveClash();
-    }, this.state.config.windowMs);
+    }, this.state.config.windowMs) as unknown as number;
   }
 
   private resolveClash(): void {
     if (!this.state) return;
+
+    // Prevent double resolve for same round
+    if (this.clashResolvedForRound === this.state.currentRound) {
+      return;
+    }
+    this.clashResolvedForRound = this.state.currentRound;
 
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
 
     // Check for missing intents
     if (!intentA && !intentB) {
-      // Both missing: draw, no score
       this.broadcastDraw('draw_both_missing');
       return;
     }
@@ -378,9 +400,7 @@ export class MatchRoom extends DurableObject {
       }
     }
 
-    // Both have intents: resolve clash
-    // Determine final stance: last intent among windUp/feint/commit
-    // commit overrides feint overrides windUp
+    // Both have intents: resolve clash with timing-aware logic
     const stanceA = this.getFinalStance(intentA.type);
     const stanceB = this.getFinalStance(intentB.type);
 
@@ -392,11 +412,23 @@ export class MatchRoom extends DurableObject {
       this.broadcastDraw('draw_double_commit');
       return;
     } else if (stanceA === 'commit' && stanceB === 'feint') {
-      winner = 'A';
-      reason = 'commit_beats_feint';
+      // Timing-based: if feint AFTER commit, feint punishes; otherwise commit wins
+      if (intentB.timestamp > intentA.timestamp) {
+        winner = 'B';
+        reason = 'feint_punish_early_commit';
+      } else {
+        winner = 'A';
+        reason = 'commit_beats_feint';
+      }
     } else if (stanceA === 'feint' && stanceB === 'commit') {
-      winner = 'B';
-      reason = 'commit_beats_feint';
+      // Timing-based: if feint AFTER commit, feint punishes; otherwise commit wins
+      if (intentA.timestamp > intentB.timestamp) {
+        winner = 'A';
+        reason = 'feint_punish_early_commit';
+      } else {
+        winner = 'B';
+        reason = 'commit_beats_feint';
+      }
     } else if (stanceA === 'feint' && stanceB === 'windUp') {
       winner = 'A';
       reason = 'feint_beats_windUp';
@@ -425,6 +457,19 @@ export class MatchRoom extends DurableObject {
 
     const loser: Seat = winner === 'A' ? 'B' : 'A';
     this.state.scores[winner]++;
+
+    // Record clash result
+    const clashResult: ClashResult = {
+      round: this.state.currentRound,
+      winner,
+      loser,
+      reason,
+      stanceA: intentA.type,
+      stanceB: intentB.type,
+    };
+
+    this.state.lastClash = clashResult;
+    this.state.history.push(clashResult);
 
     this.saveState();
 
@@ -460,8 +505,6 @@ export class MatchRoom extends DurableObject {
   }
 
   private getFinalStance(intentType: IntentType): IntentType {
-    // For simplicity: in this spike, each intent IS the final stance
-    // In a full implementation, track all intents in order and pick last
     return intentType;
   }
 
@@ -484,7 +527,12 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     });
 
-    setTimeout(() => {
+    // Clear existing timer before scheduling extend
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+    }
+
+    this.roundTimer = setTimeout(() => {
       this.broadcast({
         type: 'round:windowClose',
         payload: {
@@ -494,11 +542,25 @@ export class MatchRoom extends DurableObject {
         timestamp: Date.now(),
       });
       this.resolveClash();
-    }, this.state.config.windowMs);
+    }, this.state.config.windowMs) as unknown as number;
   }
 
   private broadcastDraw(reason: string): void {
     if (!this.state) return;
+
+    // Record draw in history
+    const clashResult: ClashResult = {
+      round: this.state.currentRound,
+      winner: 'A',  // Draws don't have winners, but we need valid types
+      loser: 'B',
+      reason,
+      stanceA: this.state.intents.A?.type || null,
+      stanceB: this.state.intents.B?.type || null,
+    };
+
+    this.state.lastClash = clashResult;
+    this.state.history.push(clashResult);
+    this.saveState();
 
     this.broadcast({
       type: 'clash:resolve',
@@ -533,6 +595,12 @@ export class MatchRoom extends DurableObject {
 
   private endMatch(): void {
     if (!this.state) return;
+
+    // Clear any pending timers
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+      this.roundTimer = null;
+    }
 
     const winner = this.state.scores.A >= this.state.config.firstTo ? 'A' : 'B';
     const loser = winner === 'A' ? 'B' : 'A';

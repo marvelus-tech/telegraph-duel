@@ -36,7 +36,9 @@ Create a new match room.
   "matchId": "optional-custom-id",
   "config": {
     "rounds": 5,
-    "windowMs": 5000
+    "windowMs": 5000,
+    "firstTo": 3,
+    "bestOf": 5
   }
 }
 ```
@@ -97,7 +99,30 @@ Get current room state.
     "B": { "agentId": "agent-bob", "joinedAt": "2026-09-07T03:00:05Z" }
   },
   "currentRound": 2,
-  "config": { "rounds": 5, "windowMs": 5000 }
+  "config": { 
+    "rounds": 5, 
+    "windowMs": 5000,
+    "firstTo": 3,
+    "bestOf": 5
+  },
+  "lastClash": {
+    "round": 1,
+    "winner": "A",
+    "loser": "B",
+    "reason": "feint_punish_early_commit",
+    "stanceA": "commit",
+    "stanceB": "feint"
+  },
+  "history": [
+    {
+      "round": 1,
+      "winner": "A",
+      "loser": "B",
+      "reason": "feint_punish_early_commit",
+      "stanceA": "commit",
+      "stanceB": "feint"
+    }
+  ]
 }
 ```
 
@@ -124,7 +149,14 @@ Submit an intent (windUp, feint, or commit).
   "agentId": "agent-alice",
   "type": "commit",
   "round": 2,
-  "timestamp": 1694053212345
+  "timestamp": 1694053212345,
+  "lastClash": {
+    "round": 1,
+    "winner": "A",
+    "reason": "commit_beats_feint",
+    "stanceA": "commit",
+    "stanceB": "feint"
+  }
 }
 ```
 
@@ -135,6 +167,28 @@ Submit an intent (windUp, feint, or commit).
 }
 ```
 
+## Stance Resolution Matrix
+
+The server resolves clashes based on submitted intents with timing-sensitive logic:
+
+| Seat A | Seat B | Winner | Reason | Notes |
+|--------|--------|--------|--------|-------|
+| commit | feint | A or B | `commit_beats_feint` or `feint_punish_early_commit` | **Timing-based**: If feint timestamp > commit timestamp, feint wins (baited early commit). Otherwise commit wins. |
+| feint | commit | A or B | `commit_beats_feint` or `feint_punish_early_commit` | **Timing-based**: Same logic as above |
+| commit | commit | DRAW | `draw_double_commit` | No score change |
+| commit | windUp | A | `commit_beats_windUp` | Commit always beats windUp |
+| windUp | commit | B | `commit_beats_windUp` | Commit always beats windUp |
+| feint | windUp | A | `feint_beats_windUp` | Feint beats windUp |
+| windUp | feint | B | `feint_beats_windUp` | Feint beats windUp |
+| feint | feint | DRAW | `draw_double_feint` | No score change |
+| windUp | windUp | DRAW | `draw_double_windUp` | No score change |
+| (missing) | any | Extend or Draw | `draw_after_extend_miss` | Missing intent extends once, then draws |
+| (missing) | (missing) | DRAW | `draw_both_missing` | Both missed window |
+
+**Key mechanic:** Feint can punish greedy early commits. If an agent commits too early within the window, the opponent can read it and submit a feint afterward to win (`feint_punish_early_commit`). This rewards patience and reads while keeping commit viable when timed well.
+
+**Draw handling:** Commit vs commit, feint vs feint, and windUp vs windUp all result in draws with no score change. If one agent misses the window, the round extends once for 1 additional window. If still missing, the round draws.
+
 ### GET /rooms/:id/watch
 WebSocket endpoint for real-time match events.
 
@@ -143,6 +197,7 @@ Connect with: `wss://your-worker.workers.dev/rooms/rm_abc123/watch`
 Server broadcasts game events matching the EventBus schema:
 - `match:start`
 - `round:start`
+- `round:extend` (when one agent misses window)
 - `agent:windUp`, `agent:feint`, `agent:commit`
 - `round:windowClose`
 - `clash:resolve`
@@ -172,8 +227,8 @@ Your Worker URL will be printed after deploy (e.g., `https://telegraph-duel-matc
 1. Start the Worker: `npm run dev`
 2. Default local URL: `http://localhost:8787`
 3. Create a room: `curl -X POST http://localhost:8787/rooms`
-4. Join seat A: `curl -X POST http://localhost:8787/rooms/rm_abc123/join -d '{"agentId":"alice","seat":"A"}'`
-5. Join seat B: `curl -X POST http://localhost:8787/rooms/rm_abc123/join -d '{"agentId":"bob","seat":"B"}'`
+4. Join seat A: `curl -X POST http://localhost:8787/rooms/rm_abc123/join -H "User-Agent: TestBot/1.0" -d '{"agentId":"alice","seat":"A"}'`
+5. Join seat B: `curl -X POST http://localhost:8787/rooms/rm_abc123/join -H "User-Agent: TestBot/1.0" -d '{"agentId":"bob","seat":"B"}'`
 6. Watch via WebSocket: `ws://localhost:8787/rooms/rm_abc123/watch`
 
 ## Client Integration
@@ -199,7 +254,10 @@ After merging this PR:
 3. Without these headers, Cloudflare may return a 403 error. Update all agent implementations to include one of these headers.
 
 4. Match logic changes:
-   - Win condition is now **first to 3** (best-of-5)
+   - Win condition is **first to 3** (default, configurable via `firstTo`)
+   - Rounds capped at `bestOf` (default 5)
    - Missing intents trigger **draw** or **extend** (no auto-loss)
-   - Clash resolution uses deterministic RPS logic (no timestamp race)
+   - Clash resolution uses timing-aware logic: feint can punish early commits
+   - Double commits/feints/windUps result in draws
    - All clash events include a `reason` field explaining the outcome
+   - `lastClash` and `history` available in GET /rooms/:id
