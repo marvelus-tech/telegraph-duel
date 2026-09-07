@@ -111,7 +111,7 @@ export function createTestConfig(options: {
     feePayerKeypair,
     programId: new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM'),
     pollIntervalMs: 5000,
-    publishSettlementEvents: false,
+    publishSettlementEvents: process.env.PUBLISH_SETTLEMENT_EVENTS === 'true',
     agentKeypairs,
   };
 }
