@@ -69,6 +69,7 @@ solana/
 ├── scripts/
 │   ├── start-validator.sh    # Start local Solana validator
 │   ├── deploy-local.sh       # Deploy to localnet
+│   ├── demo.js               # Two-player demo (O testing gate)
 │   └── setup-devnet.sh       # Deploy to devnet
 └── README.md                 # This file
 ```
@@ -365,14 +366,35 @@ Before considering this implementation complete, verify:
 
 ## Test Commands
 
-### Build Program
+### Complete Localnet Test Flow
+
+```bash
+# Terminal 1: Start validator
+cd solana
+./scripts/start-validator.sh
+
+# Terminal 2: Deploy and run demo
+cd solana
+./scripts/deploy-local.sh
+node scripts/demo.js
+```
+
+**Demo script shows**:
+- ✅ Two distinct wallets (player1, player2)
+- ✅ Full flow: create → join → lock → settle
+- ✅ Session keys for both players
+- ✅ Score PDAs created on-chain
+
+### Individual Commands
+
+#### Build Program
 
 ```bash
 cd solana
 anchor build
 ```
 
-### Build SDK
+#### Build SDK
 
 ```bash
 cd solana/sdk
@@ -380,21 +402,28 @@ npm install
 npm run build
 ```
 
-### Start Local Validator
+#### Start Local Validator
 
 ```bash
 cd solana
 ./scripts/start-validator.sh
 ```
 
-### Deploy to Localnet
+#### Deploy to Localnet
 
 ```bash
 cd solana
 ./scripts/deploy-local.sh
 ```
 
-### Deploy to Devnet
+#### Run Demo (Two-Player Flow)
+
+```bash
+cd solana
+node scripts/demo.js
+```
+
+#### Deploy to Devnet
 
 ```bash
 cd solana
@@ -454,6 +483,7 @@ v1 is **stake-free** with no anti-sybil. Future versions could add:
 **Scripts**:
 - `solana/scripts/start-validator.sh` - Local validator
 - `solana/scripts/deploy-local.sh` - Deploy localnet
+- `solana/scripts/demo.js` - Two-player demo (O testing gate)
 - `solana/scripts/setup-devnet.sh` - Deploy devnet
 
 **Documentation**:
