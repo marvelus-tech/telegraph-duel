@@ -322,8 +322,8 @@ export class MatchRoom extends DurableObject {
 
     this.state.currentRound++;
     this.state.intents = {};
-    this.state.roundStartTime = Date.now();
     this.state.roundExtended = false;
+    this.state.roundStartTime = Date.now();
     this.clashResolvedForRound = null;
 
     this.saveState();
@@ -374,14 +374,19 @@ export class MatchRoom extends DurableObject {
   private resolveClash(): void {
     if (!this.state) return;
 
-    // Prevent double resolve for same round
+    // Early exit if already resolved for this round
     if (this.clashResolvedForRound === this.state.currentRound) {
       return;
     }
-    this.clashResolvedForRound = this.state.currentRound;
 
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
+
+    // Safety: if both intents exist and roundExtended, resolve immediately
+    if (intentA && intentB && this.state.roundExtended) {
+      this.finalizeClash(intentA, intentB);
+      return;
+    }
 
     // Check for missing intents
     if (!intentA && !intentB) {
@@ -401,6 +406,28 @@ export class MatchRoom extends DurableObject {
     }
 
     // Both have intents: resolve clash with timing-aware logic
+    this.finalizeClash(intentA, intentB);
+  }
+
+  private getFinalStance(intentType: IntentType): IntentType {
+    return intentType;
+  }
+
+  private finalizeClash(
+    intentA: { type: IntentType; round: number; timestamp: number } | undefined,
+    intentB: { type: IntentType; round: number; timestamp: number } | undefined
+  ): void {
+    if (!this.state) return;
+
+    // NOW set the flag - only when actually finalizing
+    this.clashResolvedForRound = this.state.currentRound;
+
+    if (!intentA || !intentB) {
+      // Should not happen here, but handle defensively
+      this.broadcastDraw('draw_missing_intent_in_finalize');
+      return;
+    }
+
     const stanceA = this.getFinalStance(intentA.type);
     const stanceB = this.getFinalStance(intentB.type);
 
@@ -510,6 +537,9 @@ export class MatchRoom extends DurableObject {
 
   private extendRound(): void {
     if (!this.state) return;
+
+    // Allow the extended window to resolve by clearing the flag
+    this.clashResolvedForRound = null;
 
     this.state.roundExtended = true;
     this.saveState();
