@@ -8,9 +8,9 @@ pub struct CreateMatch<'info> {
         init,
         payer = player1,
         space = MatchAccount::LEN,
-        seeds = [b"match", &match_id],
+        seeds = [b"match", match_id.as_ref()],
         bump
-    ]]
+    )]
     pub match_account: Account<'info, MatchAccount>,
     
     #[account(mut)]

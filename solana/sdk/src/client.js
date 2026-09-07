@@ -1,5 +1,6 @@
 import { PublicKey, Keypair, SystemProgram, Transaction, TransactionInstruction, sendAndConfirmTransaction, } from '@solana/web3.js';
-const PROGRAM_ID = new PublicKey('Du3LCxxx1111111111111111111111111111111111');
+import { createHash } from 'crypto';
+const PROGRAM_ID = new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM');
 /**
  * Solana client for Telegraph Duel on-chain settlement
  * Aligns with game events from EVENTBUS.md
@@ -80,7 +81,7 @@ export class TelegraphDuelClient {
         }
         const [player1ScorePDA] = this.getPlayerScorePDA(matchAccount.player1);
         const [player2ScorePDA] = this.getPlayerScorePDA(matchAccount.player2);
-        const instruction = await this.buildSettleMatchInstruction(matchPDA, player1ScorePDA, player2ScorePDA, authority.publicKey, params.player1Score, params.player2Score);
+        const instruction = await this.buildSettleMatchInstruction(matchPDA, player1ScorePDA, matchAccount.player2, player2ScorePDA, authority.publicKey, params.player1Score, params.player2Score);
         const transaction = new Transaction().add(instruction);
         const signature = await sendAndConfirmTransaction(this.connection, transaction, [authority], { commitment: 'confirmed' });
         return signature;
@@ -148,17 +149,18 @@ export class TelegraphDuelClient {
             { pubkey: matchPDA, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: false },
         ];
-        const discriminator = Buffer.from([0x02]);
+        const discriminator = createHash('sha256').update('global:lock_match').digest().subarray(0, 8);
         return new TransactionInstruction({
             keys,
             programId: this.programId,
             data: discriminator,
         });
     }
-    async buildSettleMatchInstruction(matchPDA, player1ScorePDA, player2ScorePDA, authority, player1Score, player2Score) {
+    async buildSettleMatchInstruction(matchPDA, player1ScorePDA, player2, player2ScorePDA, authority, player1Score, player2Score) {
         const keys = [
             { pubkey: matchPDA, isSigner: false, isWritable: true },
             { pubkey: player1ScorePDA, isSigner: false, isWritable: true },
+            { pubkey: player2, isSigner: false, isWritable: false },
             { pubkey: player2ScorePDA, isSigner: false, isWritable: true },
             { pubkey: authority, isSigner: true, isWritable: true },
             { pubkey: SystemProgram.programId, isSigner: false, isWritable: false },
@@ -171,15 +173,27 @@ export class TelegraphDuelClient {
         });
     }
     encodeCreateMatchData(params) {
-        const discriminator = Buffer.from([0x00]);
-        return Buffer.concat([discriminator, params.matchId]);
+        const discriminator = createHash('sha256').update('global:create_match').digest().subarray(0, 8);
+        const session = params.sessionPubkey
+            ? Buffer.concat([Buffer.from([1]), params.sessionPubkey.toBuffer()])
+            : Buffer.from([0]);
+        const expiry = params.sessionExpiry != null
+            ? (() => { const b = Buffer.alloc(8); b.writeBigInt64LE(BigInt(params.sessionExpiry)); return Buffer.concat([Buffer.from([1]), b]); })()
+            : Buffer.from([0]);
+        return Buffer.concat([discriminator, params.matchId, session, expiry]);
     }
     encodeJoinMatchData(params) {
-        const discriminator = Buffer.from([0x01]);
-        return discriminator;
+        const discriminator = createHash('sha256').update('global:join_match').digest().subarray(0, 8);
+        const session = params.sessionPubkey
+            ? Buffer.concat([Buffer.from([1]), params.sessionPubkey.toBuffer()])
+            : Buffer.from([0]);
+        const expiry = params.sessionExpiry != null
+            ? (() => { const b = Buffer.alloc(8); b.writeBigInt64LE(BigInt(params.sessionExpiry)); return Buffer.concat([Buffer.from([1]), b]); })()
+            : Buffer.from([0]);
+        return Buffer.concat([discriminator, session, expiry]);
     }
     encodeSettleMatchData(player1Score, player2Score) {
-        const discriminator = Buffer.from([0x03]);
+        const discriminator = createHash('sha256').update('global:settle_match').digest().subarray(0, 8);
         const p1 = Buffer.alloc(8);
         p1.writeBigUInt64LE(BigInt(player1Score));
         const p2 = Buffer.alloc(8);
@@ -192,18 +206,66 @@ export class TelegraphDuelClient {
         offset += 32;
         const player1 = new PublicKey(data.subarray(offset, offset + 32));
         offset += 32;
+        const hasP2 = data[offset];
+        offset += 1;
+        let player2 = null;
+        if (hasP2) {
+            player2 = new PublicKey(data.subarray(offset, offset + 32));
+            offset += 32;
+        }
+        const hasS1 = data[offset];
+        offset += 1;
+        let player1Session = null;
+        if (hasS1) {
+            player1Session = new PublicKey(data.subarray(offset, offset + 32));
+            offset += 32;
+        }
+        const hasS2 = data[offset];
+        offset += 1;
+        let player2Session = null;
+        if (hasS2) {
+            player2Session = new PublicKey(data.subarray(offset, offset + 32));
+            offset += 32;
+        }
+        const hasExp = data[offset];
+        offset += 1;
+        let sessionExpiry = null;
+        if (hasExp) {
+            sessionExpiry = Number(data.readBigInt64LE(offset));
+            offset += 8;
+        }
+        const stateByte = data[offset];
+        offset += 1;
+        const states = ['WaitingForPlayer', 'Locked', 'Settled'];
+        const createdAt = Number(data.readBigInt64LE(offset));
+        offset += 8;
+        const hasLocked = data[offset];
+        offset += 1;
+        let lockedAt = null;
+        if (hasLocked) {
+            lockedAt = Number(data.readBigInt64LE(offset));
+            offset += 8;
+        }
+        const hasSettled = data[offset];
+        offset += 1;
+        let settledAt = null;
+        if (hasSettled) {
+            settledAt = Number(data.readBigInt64LE(offset));
+            offset += 8;
+        }
+        const bump = data[offset];
         return {
             matchId,
             player1,
-            player2: null,
-            player1Session: null,
-            player2Session: null,
-            sessionExpiry: null,
-            state: 'WaitingForPlayer',
-            createdAt: 0,
-            lockedAt: null,
-            settledAt: null,
-            bump: 0,
+            player2,
+            player1Session,
+            player2Session,
+            sessionExpiry,
+            state: states[stateByte] || String(stateByte),
+            createdAt,
+            lockedAt,
+            settledAt,
+            bump,
         };
     }
     deserializePlayerScore(data) {

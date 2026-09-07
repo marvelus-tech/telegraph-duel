@@ -110,6 +110,7 @@ async function main() {
     console.log(`Score PDAs:`);
     console.log(`  A: ${event.payload.scorePdaA}`);
     console.log(`  B: ${event.payload.scorePdaB}`);
+    console.log(JSON.stringify(event, null, 2));
     console.log('━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n');
   });
   

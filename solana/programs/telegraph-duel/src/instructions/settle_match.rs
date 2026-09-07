@@ -19,11 +19,17 @@ pub struct SettleMatch<'info> {
     )]
     pub player1_score: Account<'info, PlayerScore>,
     
+
+    /// CHECK: must equal match_account.player2
+    #[account(
+        constraint = match_account.player2 == Some(player2.key()) @ TelegraphDuelError::Unauthorized
+    )]
+    pub player2: UncheckedAccount<'info>,
     #[account(
         init_if_needed,
         payer = authority,
         space = PlayerScore::LEN,
-        seeds = [b"score", match_account.player2.unwrap().as_ref()],
+        seeds = [b"score", player2.key().as_ref()],
         bump
     )]
     pub player2_score: Account<'info, PlayerScore>,

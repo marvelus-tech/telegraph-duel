@@ -22,10 +22,12 @@ export class MatchServerBridge {
   private settledRooms: Set<string> = new Set();
   private eventListeners: Array<(event: ScoreSettledEvent) => void> = [];
   private pollingInterval?: NodeJS.Timeout;
+  private agentKeypairs: Map<string, Keypair> = new Map();
 
-  constructor(config: BridgeConfig) {
+  constructor(config: BridgeConfig & { agentKeypairs?: Map<string, Keypair> }) {
     this.connection = new Connection(config.solanaRpcUrl, 'confirmed');
-    this.client = new TelegraphDuelClient(this.connection);
+    this.client = new TelegraphDuelClient(this.connection, config.programId);
+    this.agentKeypairs = config.agentKeypairs ?? new Map();
     
     this.config = {
       ...config,
@@ -121,41 +123,40 @@ export class MatchServerBridge {
       console.log(`[Bridge]   Agent B: ${agentIdB} (wallet: ${walletB.toBase58().slice(0, 8)}...)`);
       console.log(`[Bridge]   Scores: ${scores.A} - ${scores.B}`);
 
-      // Use fee payer keypair from config
-      const feePayerKeypair = this.config.feePayerKeypair;
+      const kpA = this.agentKeypairs.get(agentIdA);
+      const kpB = this.agentKeypairs.get(agentIdB);
+      if (!kpA || !kpB) {
+        return {
+          success: false,
+          error: `Missing agent keypairs for create/join/settle:  `.trim(),
+        };
+      }
+      if (!kpA.publicKey.equals(walletA) || !kpB.publicKey.equals(walletB)) {
+        return { success: false, error: 'Agent keypair/wallet mismatch' };
+      }
+      for (const kp of [kpA, kpB]) {
+        const bal = await this.connection.getBalance(kp.publicKey);
+        if (bal < 500_000_000) {
+          const sig = await this.connection.requestAirdrop(kp.publicKey, 2_000_000_000);
+          await this.connection.confirmTransaction(sig, 'confirmed');
+        }
+      }
 
       // Check if match exists on-chain, if not create it
       const existingMatch = await this.client.getMatchAccount(matchId);
       
       if (!existingMatch) {
         console.log('[Bridge] Match not found on-chain, creating and locking...');
-        
-        // Create session keys
-        const sessionA = this.client.createSessionKey(3600);
-        const sessionB = this.client.createSessionKey(3600);
 
-        // Create match (player1 = walletA)
-        await this.client.createMatch(feePayerKeypair, {
-          matchId,
-          sessionPubkey: sessionA.publicKey,
-          sessionExpiry: sessionA.expiry,
-        });
-
-        // Join match (player2 = walletB)
-        await this.client.joinMatch(feePayerKeypair, {
-          matchId,
-          sessionPubkey: sessionB.publicKey,
-          sessionExpiry: sessionB.expiry,
-        });
-
-        // Lock match
-        await this.client.lockMatch(feePayerKeypair, matchId);
+        await this.client.createMatch(kpA, { matchId });
+        await this.client.joinMatch(kpB, { matchId });
+        await this.client.lockMatch(kpA, matchId);
         
         console.log('[Bridge] Match created, joined, and locked');
       }
 
-      // Settle match with scores
-      const txSignature = await this.client.settleMatch(feePayerKeypair, {
+      // Settle match with scores (player1 authority)
+      const txSignature = await this.client.settleMatch(kpA, {
         matchId,
         player1Score: scores.A,
         player2Score: scores.B,

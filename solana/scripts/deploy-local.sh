@@ -20,5 +20,5 @@ anchor deploy
 echo ""
 echo "✅ Deployment complete!"
 echo ""
-echo "📝 Program ID: Du3LCxxx1111111111111111111111111111111111"
+echo "📝 Program ID: HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM"
 echo ""

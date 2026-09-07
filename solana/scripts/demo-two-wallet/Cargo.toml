@@ -1,0 +1,13 @@
+[package]
+name = "demo-two-wallet"
+version = "0.1.0"
+edition = "2021"
+
+[dependencies]
+solana-client = "2.1"
+solana-sdk = "2.1"
+sha2 = "0.10"
+bs58 = "0.5"
+hex = "0.4"
+
+[workspace]

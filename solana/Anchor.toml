@@ -5,7 +5,7 @@ resolution = true
 skip-lint = false
 
 [programs.localnet]
-telegraph_duel = "Du3LCxxx1111111111111111111111111111111111"
+telegraph_duel = "HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM"
 
 [registry]
 url = "https://api.apr.dev"
