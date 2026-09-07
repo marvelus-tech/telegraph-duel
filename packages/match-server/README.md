@@ -167,6 +167,75 @@ Submit an intent (windUp, feint, or commit).
 }
 ```
 
+### POST /rooms/:id/score-settled
+Receive and broadcast on-chain settlement events from the Dex bridge.
+
+**Accepted formats:**
+
+1. **Flat payload** (preferred):
+```json
+{
+  "roomId": "rm_abc123",
+  "matchId": "rm_abc123",
+  "winnerAgentId": "agent-alice",
+  "winnerSeat": "A",
+  "finalScoresA": 3,
+  "finalScoresB": 1,
+  "agentIdA": "agent-alice",
+  "agentIdB": "agent-bob",
+  "walletA": "5Yv...",
+  "walletB": "8Qp...",
+  "scorePdaA": "Abc...",
+  "scorePdaB": "Xyz...",
+  "txSig": "3mP...",
+  "lastClashReason": "commit_beats_feint"
+}
+```
+
+2. **Envelope format** (dex bridge PR #20):
+```json
+{
+  "type": "score.settled",
+  "payload": {
+    "roomId": "rm_abc123",
+    "matchId": "rm_abc123",
+    "winnerAgentId": "agent-alice",
+    "winnerSeat": "A",
+    "finalScoresA": 3,
+    "finalScoresB": 1,
+    "agentIdA": "agent-alice",
+    "agentIdB": "agent-bob",
+    "walletA": "5Yv...",
+    "walletB": "8Qp...",
+    "scorePdaA": "Abc...",
+    "scorePdaB": "Xyz...",
+    "txSig": "3mP...",
+    "lastClashReason": "commit_beats_feint"
+  },
+  "timestamp": 1694053212345
+}
+```
+
+**Behavior:**
+- If body has `type === 'score.settled'` and object `payload`, the handler unwraps and uses `body.payload`
+- Otherwise, treats the entire body as the flat payload
+- Broadcasts to all WebSocket clients as:
+```json
+{
+  "type": "score.settled",
+  "payload": { /* flat fields */ },
+  "timestamp": <current timestamp>
+}
+```
+
+**Response:**
+```json
+{
+  "received": true,
+  "timestamp": 1694053212345
+}
+```
+
 ## Stance Resolution Matrix
 
 The server resolves clashes based on submitted intents with timing-sensitive logic:

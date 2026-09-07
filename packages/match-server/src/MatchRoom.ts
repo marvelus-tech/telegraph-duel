@@ -68,6 +68,10 @@ export class MatchRoom extends DurableObject {
       return this.handleIntent(request);
     }
 
+    if (request.method === 'POST' && url.pathname.endsWith('/score-settled')) {
+      return this.handleScoreSettled(request);
+    }
+
     return new Response(JSON.stringify({ error: 'Not found' }), { 
       status: 404,
       headers: { 'Content-Type': 'application/json' },
@@ -196,6 +200,43 @@ export class MatchRoom extends DurableObject {
 
   private async handleIntentFromWS(intent: IntentRequest): Promise<void> {
     await this.processIntent(intent);
+  }
+
+  private async handleScoreSettled(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as Record<string, unknown>;
+      
+      // Unwrap envelope if present (dex bridge PR #20 format)
+      // Accept both: flat payload OR { type: 'score.settled', payload: {...}, timestamp }
+      let payload: Record<string, unknown>;
+      
+      if (body.type === 'score.settled' && body.payload && typeof body.payload === 'object') {
+        // Envelope format from bridge: extract inner payload
+        payload = body.payload as Record<string, unknown>;
+      } else {
+        // Flat format: use body directly
+        payload = body;
+      }
+
+      // Broadcast score.settled event with flat payload and current timestamp
+      this.broadcast({
+        type: 'score.settled',
+        payload,
+        timestamp: Date.now(),
+      });
+
+      return new Response(JSON.stringify({ 
+        received: true, 
+        timestamp: Date.now() 
+      }), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Invalid request body' }), {
+        status: 400,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   private async processIntent(intent: IntentRequest): Promise<Response> {
