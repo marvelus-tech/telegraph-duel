@@ -22,6 +22,7 @@ export function loadConfig(): BridgeConfig & { feePayerKeypair: Keypair } {
   const matchServerUrl = process.env.MATCH_SERVER_URL || 'https://telegraph-duel-match-server.marvelus.workers.dev';
   const programIdStr = process.env.PROGRAM_ID || 'HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM';
   const pollIntervalMs = parseInt(process.env.POLL_INTERVAL_MS || '5000', 10);
+  const publishSettlementEvents = process.env.PUBLISH_SETTLEMENT_EVENTS === 'true';
 
   // Parse agent wallet map
   const agentWallets = new Map<string, PublicKey>();
@@ -77,6 +78,7 @@ export function loadConfig(): BridgeConfig & { feePayerKeypair: Keypair } {
     feePayerKeypair,
     programId: new PublicKey(programIdStr),
     pollIntervalMs,
+    publishSettlementEvents,
   };
 
   return config;
@@ -109,6 +111,7 @@ export function createTestConfig(options: {
     feePayerKeypair,
     programId: new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM'),
     pollIntervalMs: 5000,
+    publishSettlementEvents: false,
     agentKeypairs,
   };
 }
