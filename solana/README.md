@@ -111,6 +111,26 @@ pub struct PlayerScore {
 }
 ```
 
+## Testing Gate: Two Distinct Identities Required
+
+⚠️ **IMPORTANT**: All testing and demos **must use two distinct wallet/session keypairs**.
+
+This implementation requires:
+- ✅ **Two separate player wallets** (player1, player2)
+- ✅ **Two separate session keys** (one per player)
+- ✅ **Both players join one match** before settlement
+
+**Why**: This validates the core match flow (create → join → lock → settle) and ensures session-scoped authorization works correctly for both participants.
+
+**Demo requirement**: Any demo script must:
+1. Generate two distinct keypairs (player1, player2)
+2. Create match with player1
+3. Join match with player2
+4. Lock match (either player)
+5. Settle with final scores (either player or session key)
+
+See "Usage Examples" below for implementation.
+
 ## Quick Start
 
 ### Prerequisites
@@ -186,19 +206,25 @@ eventBus.on('*' as any, (event) => {
 
 ## Usage Examples
 
-### Manual SDK Usage
+### Manual SDK Usage (Two-Player Flow)
 
 ```typescript
 import { Connection, Keypair } from '@solana/web3.js';
-import { TelegraphDuelClient } from './solana/sdk';
+import { TelegraphDuelClient, generateMatchId } from './solana/sdk';
 
 const connection = new Connection('http://127.0.0.1:8899');
 const client = new TelegraphDuelClient(connection);
 
-// Create match
-const matchId = client.generateMatchId('match-001');
+// REQUIRED: Two distinct keypairs for testing gate
 const player1 = Keypair.generate();
 const player2 = Keypair.generate();
+
+// Airdrop SOL (localnet only)
+await connection.requestAirdrop(player1.publicKey, 1e9);
+await connection.requestAirdrop(player2.publicKey, 1e9);
+
+// Generate match ID
+const matchId = generateMatchId('match-001');
 
 // Create session keys (spend-guard pattern)
 const session1 = client.createSessionKey(3600); // 1 hour expiry
@@ -240,19 +266,33 @@ console.log('Player 1:', player1Score); // { wins: 1, losses: 0, ... }
 console.log('Player 2:', player2Score); // { wins: 0, losses: 1, ... }
 ```
 
-### Automatic Event Bridge
+### Automatic Event Bridge (Two-Player Flow)
 
 ```typescript
 import { eventBus } from '../src/bus/EventBus';
 import { SolanaEventBridge } from './solana/sdk';
+import { Connection, Keypair } from '@solana/web3.js';
 
+const connection = new Connection('http://127.0.0.1:8899');
+
+// REQUIRED: Two distinct keypairs for testing gate
+const player1 = Keypair.generate();
+const player2 = Keypair.generate();
+
+// Airdrop SOL (localnet only)
+await connection.requestAirdrop(player1.publicKey, 1e9);
+await connection.requestAirdrop(player2.publicKey, 1e9);
+
+// Create bridge with both players
 const bridge = new SolanaEventBridge(connection, player1, player2);
 
 // Subscribe to game events
 eventBus.on('*' as any, bridge.handleGameEvent.bind(bridge));
 
 // Now the game will automatically:
-// - Create match on-chain when match:start fires
+// - Create match on-chain when match:start fires (player1)
+// - Auto-join with player2
+// - Lock match
 // - Settle scores on-chain when match:end fires
 ```
 
@@ -307,6 +347,21 @@ This implementation **does not invent new event types**. It:
 4. **Keeps** all other events (round/agent/clash) off-chain
 
 The TypeScript types in `sdk/src/types.ts` include `GameEventType` which mirrors the exact types from EVENTBUS.md.
+
+## Test Checklist
+
+Before considering this implementation complete, verify:
+
+- [ ] **Two distinct player keypairs** are generated
+- [ ] **Player 1 creates match** with session key
+- [ ] **Player 2 joins match** with session key
+- [ ] **Match is locked** (either player can lock)
+- [ ] **Match is settled** with player1Score and player2Score
+- [ ] **Both PlayerScore PDAs** are created/updated
+- [ ] **Session keys expire** after timeout
+- [ ] **Authorization fails** if non-player tries to settle
+
+**Testing gate**: All tests must use **two distinct wallets**, not a single wallet joining itself.
 
 ## Test Commands
 
