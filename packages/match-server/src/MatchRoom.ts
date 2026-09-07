@@ -3,6 +3,8 @@ import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig,
 
 const DEFAULT_ROUNDS = 5;
 const DEFAULT_WINDOW_MS = 5000;
+const DEFAULT_FIRST_TO = 3;
+const DEFAULT_BEST_OF = 5;
 const WIND_UP_DURATION = 800;
 const FEINT_WINDOW = 400;
 
@@ -43,14 +45,39 @@ export class MatchRoom extends DurableObject {
     }
 
     if (request.method === 'POST' && url.pathname.endsWith('/join')) {
+      if (!this.validateAgentHeaders(request)) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header.' 
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return this.handleJoin(request);
     }
 
     if (request.method === 'POST' && url.pathname.endsWith('/intent')) {
+      if (!this.validateAgentHeaders(request)) {
+        return new Response(JSON.stringify({ 
+          error: 'Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header.' 
+        }), {
+          status: 403,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
       return this.handleIntent(request);
     }
 
-    return new Response('Not found', { status: 404 });
+    return new Response(JSON.stringify({ error: 'Not found' }), { 
+      status: 404,
+      headers: { 'Content-Type': 'application/json' },
+    });
+  }
+
+  private validateAgentHeaders(request: Request): boolean {
+    const userAgent = request.headers.get('User-Agent');
+    const agentToken = request.headers.get('X-Agent-Token');
+    return !!(userAgent && userAgent.trim().length > 0) || !!(agentToken && agentToken.trim().length > 0);
   }
 
   private async handleInit(request: Request): Promise<Response> {
@@ -224,7 +251,6 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     };
 
-    // Optionally include lastClash if one just happened
     if (this.state.lastClash) {
       response.lastClash = this.state.lastClash;
     }
@@ -240,7 +266,7 @@ export class MatchRoom extends DurableObject {
     return null;
   }
 
-  async initialize(roomId: string, config: { rounds?: number; windowMs?: number } = {}): Promise<void> {
+  async initialize(roomId: string, config: { rounds?: number; windowMs?: number; firstTo?: number; bestOf?: number } = {}): Promise<void> {
     this.state = {
       roomId,
       status: 'waiting',
@@ -250,6 +276,8 @@ export class MatchRoom extends DurableObject {
       config: {
         rounds: config.rounds ?? DEFAULT_ROUNDS,
         windowMs: config.windowMs ?? DEFAULT_WINDOW_MS,
+        firstTo: config.firstTo ?? DEFAULT_FIRST_TO,
+        bestOf: config.bestOf ?? DEFAULT_BEST_OF,
       },
       createdAt: new Date().toISOString(),
       intents: {},
@@ -284,12 +312,10 @@ export class MatchRoom extends DurableObject {
   private startRound(): void {
     if (!this.state) return;
 
-    const firstTo = Math.ceil(this.state.config.rounds / 2);
-    
     // Cap: don't start new round if already hit firstTo OR exceeded bestOf
-    if (this.state.currentRound >= this.state.config.rounds ||
-        this.state.scores.A >= firstTo || 
-        this.state.scores.B >= firstTo) {
+    if (this.state.scores.A >= this.state.config.firstTo || 
+        this.state.scores.B >= this.state.config.firstTo ||
+        this.state.currentRound >= this.state.config.bestOf) {
       this.endMatch();
       return;
     }
@@ -297,6 +323,7 @@ export class MatchRoom extends DurableObject {
     this.state.currentRound++;
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
+    this.state.roundExtended = false;
     this.clashResolvedForRound = null;
 
     this.saveState();
@@ -310,6 +337,7 @@ export class MatchRoom extends DurableObject {
         round: this.state.currentRound,
         windowStartMs,
         windowEndMs,
+        firstTo: this.state.config.firstTo,
       },
       timestamp: Date.now(),
     });
@@ -355,52 +383,76 @@ export class MatchRoom extends DurableObject {
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
 
-    let winner: Seat | null = null;
-    let reason = 'unknown';
-
+    // Check for missing intents
     if (!intentA && !intentB) {
-      winner = Math.random() < 0.5 ? 'A' : 'B';
-      reason = 'both_timeout';
-    } else if (!intentA) {
-      winner = 'B';
-      reason = 'opponent_timeout';
-    } else if (!intentB) {
-      winner = 'A';
-      reason = 'opponent_timeout';
-    } else {
-      // Both submitted intents - apply stance matrix with timing
-      if (intentA.type === 'commit' && intentB.type === 'feint') {
-        // Check if feint was submitted AFTER commit (baited early commit)
-        if (intentB.timestamp > intentA.timestamp) {
-          winner = 'B';
-          reason = 'feint_punish_early_commit';
-        } else {
-          winner = 'A';
-          reason = 'commit_beats_feint';
-        }
-      } else if (intentA.type === 'feint' && intentB.type === 'commit') {
-        // Check if feint was submitted AFTER commit (baited early commit)
-        if (intentA.timestamp > intentB.timestamp) {
-          winner = 'A';
-          reason = 'feint_punish_early_commit';
-        } else {
-          winner = 'B';
-          reason = 'commit_beats_feint';
-        }
-      } else if (intentA.type === 'commit' && intentB.type === 'commit') {
-        winner = intentA.timestamp < intentB.timestamp ? 'A' : 'B';
-        reason = 'commit_vs_commit_first_wins';
-      } else if (intentA.type === 'windUp' && intentB.type === 'commit') {
-        winner = 'B';
-        reason = 'commit_beats_windUp';
-      } else if (intentA.type === 'commit' && intentB.type === 'windUp') {
-        winner = 'A';
-        reason = 'commit_beats_windUp';
+      this.broadcastDraw('draw_both_missing');
+      return;
+    }
+
+    if (!intentA || !intentB) {
+      // One missing: extend once if not already extended, else draw
+      if (!this.state.roundExtended) {
+        this.extendRound();
+        return;
       } else {
-        // windUp vs windUp, feint vs feint, or other combos - random
-        winner = Math.random() < 0.5 ? 'A' : 'B';
-        reason = 'mirror_or_random';
+        this.broadcastDraw('draw_after_extend_miss');
+        return;
       }
+    }
+
+    // Both have intents: resolve clash with timing-aware logic
+    const stanceA = this.getFinalStance(intentA.type);
+    const stanceB = this.getFinalStance(intentB.type);
+
+    let winner: Seat | null = null;
+    let reason = '';
+
+    if (stanceA === 'commit' && stanceB === 'commit') {
+      // Double commit = draw
+      this.broadcastDraw('draw_double_commit');
+      return;
+    } else if (stanceA === 'commit' && stanceB === 'feint') {
+      // Timing-based: if feint AFTER commit, feint punishes; otherwise commit wins
+      if (intentB.timestamp > intentA.timestamp) {
+        winner = 'B';
+        reason = 'feint_punish_early_commit';
+      } else {
+        winner = 'A';
+        reason = 'commit_beats_feint';
+      }
+    } else if (stanceA === 'feint' && stanceB === 'commit') {
+      // Timing-based: if feint AFTER commit, feint punishes; otherwise commit wins
+      if (intentA.timestamp > intentB.timestamp) {
+        winner = 'A';
+        reason = 'feint_punish_early_commit';
+      } else {
+        winner = 'B';
+        reason = 'commit_beats_feint';
+      }
+    } else if (stanceA === 'feint' && stanceB === 'windUp') {
+      winner = 'A';
+      reason = 'feint_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'feint') {
+      winner = 'B';
+      reason = 'feint_beats_windUp';
+    } else if (stanceA === 'commit' && stanceB === 'windUp') {
+      winner = 'A';
+      reason = 'commit_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'commit') {
+      winner = 'B';
+      reason = 'commit_beats_windUp';
+    } else if (stanceA === 'windUp' && stanceB === 'windUp') {
+      // Double windUp = draw
+      this.broadcastDraw('draw_double_windUp');
+      return;
+    } else if (stanceA === 'feint' && stanceB === 'feint') {
+      // Double feint = draw
+      this.broadcastDraw('draw_double_feint');
+      return;
+    } else {
+      // Fallback: draw if we can't determine
+      this.broadcastDraw('draw_unknown');
+      return;
     }
 
     const loser: Seat = winner === 'A' ? 'B' : 'A';
@@ -412,8 +464,8 @@ export class MatchRoom extends DurableObject {
       winner,
       loser,
       reason,
-      stanceA: intentA?.type || null,
-      stanceB: intentB?.type || null,
+      stanceA: intentA.type,
+      stanceB: intentB.type,
     };
 
     this.state.lastClash = clashResult;
@@ -430,10 +482,10 @@ export class MatchRoom extends DurableObject {
         winner: this.state.seats[winner]?.agentId,
         loser: this.state.seats[loser]?.agentId,
         outcome: winner,
-        reason,
         damage: 1,
         winnerScore: this.state.scores[winner],
         loserScore: this.state.scores[loser],
+        reason,
       },
       timestamp: Date.now(),
     });
@@ -452,6 +504,95 @@ export class MatchRoom extends DurableObject {
     setTimeout(() => this.startRound(), 2000);
   }
 
+  private getFinalStance(intentType: IntentType): IntentType {
+    return intentType;
+  }
+
+  private extendRound(): void {
+    if (!this.state) return;
+
+    this.state.roundExtended = true;
+    this.saveState();
+
+    const windowStartMs = Date.now();
+    const windowEndMs = windowStartMs + this.state.config.windowMs;
+
+    this.broadcast({
+      type: 'round:extend',
+      payload: {
+        round: this.state.currentRound,
+        windowStartMs,
+        windowEndMs,
+      },
+      timestamp: Date.now(),
+    });
+
+    // Clear existing timer before scheduling extend
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+    }
+
+    this.roundTimer = setTimeout(() => {
+      this.broadcast({
+        type: 'round:windowClose',
+        payload: {
+          round: this.state?.currentRound,
+          closedAtMs: Date.now(),
+        },
+        timestamp: Date.now(),
+      });
+      this.resolveClash();
+    }, this.state.config.windowMs) as unknown as number;
+  }
+
+  private broadcastDraw(reason: string): void {
+    if (!this.state) return;
+
+    // Record draw in history
+    const clashResult: ClashResult = {
+      round: this.state.currentRound,
+      winner: 'A',  // Draws don't have winners, but we need valid types
+      loser: 'B',
+      reason,
+      stanceA: this.state.intents.A?.type || null,
+      stanceB: this.state.intents.B?.type || null,
+    };
+
+    this.state.lastClash = clashResult;
+    this.state.history.push(clashResult);
+    this.saveState();
+
+    this.broadcast({
+      type: 'clash:resolve',
+      payload: {
+        round: this.state.currentRound,
+        seatA: this.state.seats.A?.agentId,
+        seatB: this.state.seats.B?.agentId,
+        winner: null,
+        loser: null,
+        outcome: 'draw',
+        damage: 0,
+        winnerScore: this.state.scores.A,
+        loserScore: this.state.scores.B,
+        reason,
+      },
+      timestamp: Date.now(),
+    });
+
+    this.broadcast({
+      type: 'round:end',
+      payload: {
+        round: this.state.currentRound,
+        winner: null,
+        scoresA: this.state.scores.A,
+        scoresB: this.state.scores.B,
+      },
+      timestamp: Date.now(),
+    });
+
+    setTimeout(() => this.startRound(), 2000);
+  }
+
   private endMatch(): void {
     if (!this.state) return;
 
@@ -461,8 +602,7 @@ export class MatchRoom extends DurableObject {
       this.roundTimer = null;
     }
 
-    const firstTo = Math.ceil(this.state.config.rounds / 2);
-    const winner = this.state.scores.A >= firstTo ? 'A' : 'B';
+    const winner = this.state.scores.A >= this.state.config.firstTo ? 'A' : 'B';
     const loser = winner === 'A' ? 'B' : 'A';
 
     this.broadcast({
@@ -471,7 +611,7 @@ export class MatchRoom extends DurableObject {
         winner: this.state.seats[winner]?.agentId,
         finalScoresA: this.state.scores.A,
         finalScoresB: this.state.scores.B,
-        reason: `best_of_${this.state.config.rounds}_complete`,
+        reason: `first_to_${this.state.config.firstTo}_complete`,
       },
       timestamp: Date.now(),
     });

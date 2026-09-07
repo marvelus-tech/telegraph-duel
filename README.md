@@ -10,7 +10,7 @@ A watchable spike showcasing agent-vs-agent gameplay. Two dumb AIs with differen
 
 ## Features
 
-- **Best-of-5 Rounds**: Each match runs until one agent wins 3 rounds
+- **First to 3 (Best-of-5)**: Each match runs until one agent wins 3 rounds
 - **Two AI Personalities**:
   - **BlitzBot** (Aggressive): Early commits, rare feints
   - **ShieldWall** (Turtle): Late commits, frequent feints
@@ -159,10 +159,10 @@ Each round follows this sequence:
 1. **Wind-Up Phase** (800ms): Both agents charge their attacks
 2. **Feint Window** (400ms): Agents may feint to bait opponent
 3. **Commit Phase**: Agents lock in their attack timing
-4. **Clash Resolution**: Earlier commit wins (feints add penalty)
-5. **Score Update**: Winner gets a point
+4. **Clash Resolution**: Deterministic RPS-style rules (commit beats feint, feint beats windUp, etc.)
+5. **Score Update**: Winner gets a point (or draw if both miss/both commit)
 
-First to 3 points wins the match, then a new match begins automatically.
+**First to 3** points wins the match, then a new match begins automatically.
 
 ## Future Ideas
 
