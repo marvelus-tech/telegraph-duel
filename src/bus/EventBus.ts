@@ -8,6 +8,7 @@
 export type GameEventType =
   | 'match:start'    // Match begins
   | 'round:start'    // Round begins
+  | 'round:extend'   // Round window extended
   | 'agent:windUp'   // Both agents charging
   | 'agent:feint'    // Agent performs feint
   | 'agent:commit'   // Agent commits attack
