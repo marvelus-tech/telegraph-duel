@@ -74,6 +74,18 @@ solana/
 └── README.md                 # This file
 ```
 
+## SDK Discriminators (Simplified)
+
+⚠️ **Current implementation uses 1-byte stub discriminators** for demonstration purposes.
+
+The SDK in `solana/sdk/src/client.ts` encodes instructions with simplified discriminators:
+- `0x00` - create_match
+- `0x01` - join_match
+- `0x02` - lock_match
+- `0x03` - settle_match
+
+**Production note**: Full Anchor IDL should be used for proper 8-byte discriminators. Current implementation works for localnet/devnet proof-of-concept.
+
 ## On-Chain State
 
 ### MatchAccount PDA
@@ -148,6 +160,9 @@ cd solana
 
 # Install Anchor dependencies (auto-downloads on first build)
 anchor build
+
+# If anchor build fails with proc_macro2 errors:
+anchor build --no-idl
 
 # Build TypeScript SDK
 cd sdk && npm install && npm run build
@@ -368,16 +383,26 @@ Before considering this implementation complete, verify:
 
 ### Complete Localnet Test Flow
 
+**Localnet proof commands** (validated on Malwareexe):
+
 ```bash
 # Terminal 1: Start validator
 cd solana
 ./scripts/start-validator.sh
 
-# Terminal 2: Deploy and run demo
+# Terminal 2: Deploy program
 cd solana
-./scripts/deploy-local.sh
+anchor build --no-idl  # or: anchor build (if no proc_macro2 errors)
+anchor deploy
+
+# Terminal 3: Run two-player demo
+cd solana
 node scripts/demo.js
 ```
+
+**Expected**: Two-wallet flow completes with both score PDAs created.
+
+**Localnet program ID**: `HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM` (local only, changes per deployment)
 
 **Demo script shows**:
 - ✅ Two distinct wallets (player1, player2)
