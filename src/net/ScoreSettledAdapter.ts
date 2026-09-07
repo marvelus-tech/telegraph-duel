@@ -29,7 +29,7 @@ export class ScoreSettledAdapter {
    * Call this when receiving settlement data from Dex bridge or webhook.
    */
   static emitSettlement(payload: ScoreSettledPayload): void {
-    eventBus.emit('score.settled', payload as Record<string, unknown>);
+    eventBus.emit('score.settled', payload);
   }
 
   /**
