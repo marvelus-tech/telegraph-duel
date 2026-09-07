@@ -1,0 +1,29 @@
+{
+  "name": "telegraph-duel",
+  "version": "0.1.0",
+  "description": "Telegraph Duel - Stake-free Solana match settlement",
+  "type": "module",
+  "scripts": {
+    "build": "anchor build",
+    "test": "anchor test",
+    "deploy": "anchor deploy",
+    "sync-types": "anchor build && cp -r target/types sdk/src/types",
+    "sdk:build": "cd sdk && npm run build",
+    "demo": "node scripts/demo.js"
+  },
+  "keywords": [
+    "solana",
+    "anchor",
+    "telegraph-duel"
+  ],
+  "author": "",
+  "license": "MIT",
+  "devDependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@types/node": "^20.0.0",
+    "typescript": "^5.0.0"
+  },
+  "workspaces": [
+    "sdk"
+  ]
+}

@@ -1,0 +1,41 @@
+# Anchor
+.anchor
+.anchor/
+target/
+test-ledger/
+.ledger/
+
+# Node
+node_modules/
+dist/
+.npm
+*.log
+
+# Keys (NEVER commit private keys)
+.keys/
+*.keypair
+*.json
+!package.json
+!package-lock.json
+!tsconfig.json
+!Anchor.toml
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Build artifacts
+*.so
+*.a
+*.o
+.build/
+
+# Solana
+.config/solana/*.json
