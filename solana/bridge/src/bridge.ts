@@ -120,9 +120,8 @@ export class MatchServerBridge {
       console.log(`[Bridge]   Agent B: ${agentIdB} (wallet: ${walletB.toBase58().slice(0, 8)}...)`);
       console.log(`[Bridge]   Scores: ${scores.A} - ${scores.B}`);
 
-      // Create fee payer keypair (must have private key for signing)
-      // Note: In production, this should be loaded from secure storage
-      const feePayerKeypair = Keypair.generate(); // Placeholder - will be replaced with actual keypair
+      // Use fee payer keypair from config
+      const feePayerKeypair = this.config.feePayerKeypair;
 
       // Check if match exists on-chain, if not create it
       const existingMatch = await this.client.getMatchAccount(matchId);

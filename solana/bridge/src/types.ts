@@ -1,5 +1,14 @@
 import type { PublicKey } from '@solana/web3.js';
 
+export interface ClashResult {
+  round: number;
+  winner: 'A' | 'B';
+  loser: 'A' | 'B';
+  reason: string;
+  stanceA: string | null;
+  stanceB: string | null;
+}
+
 export interface MatchServerRoomState {
   roomId: string;
   status: 'waiting' | 'ready' | 'in_progress' | 'completed';
@@ -19,14 +28,8 @@ export interface MatchServerRoomState {
     bestOf: number;
   };
   createdAt: string;
-  lastClash?: {
-    round: number;
-    winner: 'A' | 'B';
-    loser: 'A' | 'B';
-    reason: string;
-    stanceA: string | null;
-    stanceB: string | null;
-  };
+  lastClash?: ClashResult;
+  history: ClashResult[];
 }
 
 export interface WalletMapping {
@@ -38,7 +41,7 @@ export interface BridgeConfig {
   solanaRpcUrl: string;
   matchServerUrl: string;
   agentWallets: Map<string, PublicKey>;
-  feePayer: PublicKey;
+  feePayerKeypair: any; // Keypair from @solana/web3.js
   programId: PublicKey;
   pollIntervalMs?: number;
 }

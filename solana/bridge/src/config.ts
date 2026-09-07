@@ -70,14 +70,13 @@ export function loadConfig(): BridgeConfig & { feePayerKeypair: Keypair } {
     }
   }
 
-  const config: BridgeConfig & { feePayerKeypair: Keypair } = {
+  const config: BridgeConfig = {
     solanaRpcUrl,
     matchServerUrl,
     agentWallets,
-    feePayer: feePayerKeypair.publicKey,
+    feePayerKeypair,
     programId: new PublicKey(programIdStr),
     pollIntervalMs,
-    feePayerKeypair,
   };
 
   return config;
@@ -90,7 +89,7 @@ export function createTestConfig(options: {
   agentIds: string[];
   solanaRpcUrl?: string;
   matchServerUrl?: string;
-}): BridgeConfig & { feePayerKeypair: Keypair; agentKeypairs: Map<string, Keypair> } {
+}): BridgeConfig & { agentKeypairs: Map<string, Keypair> } {
   const agentKeypairs = new Map<string, Keypair>();
   const agentWallets = new Map<string, PublicKey>();
 
@@ -107,10 +106,9 @@ export function createTestConfig(options: {
     solanaRpcUrl: options.solanaRpcUrl || 'http://127.0.0.1:8899',
     matchServerUrl: options.matchServerUrl || 'https://telegraph-duel-match.marvelus-tech.workers.dev',
     agentWallets,
-    feePayer: feePayerKeypair.publicKey,
+    feePayerKeypair,
     programId: new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM'),
     pollIntervalMs: 5000,
-    feePayerKeypair,
     agentKeypairs,
   };
 }

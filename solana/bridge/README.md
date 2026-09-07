@@ -218,18 +218,148 @@ bridge.startPolling(['rm_abc123', 'rm_def456']);
 bridge.stopPolling();
 ```
 
-## Testing Against a Completed Room
+## E2E Testing (Localnet)
 
-### Prerequisites
+### Quick Start (Automated E2E Test)
 
-1. **Local Solana validator running:**
+The fastest way to test the full flow:
+
+```bash
+# 1. Start localnet validator in one terminal
+cd solana
+./scripts/start-validator.sh
+
+# 2. Deploy program in another terminal
+cd solana
+anchor build --no-idl
+anchor deploy
+
+# 3. Run E2E test (uses fixture, no live API needed)
+cd solana/bridge
+npm install
+npm run e2e
+```
+
+This will:
+1. ✅ Generate test wallets (alice, bob, fee payer)
+2. ✅ Airdrop SOL to fee payer
+3. ✅ Initialize bridge
+4. ✅ Load completed room fixture
+5. ✅ Settle match on-chain
+6. ✅ Emit `score.settled` event
+7. ✅ Verify score PDAs exist
+
+**Expected output:**
+
+```
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  E2E Test: Match-Server → Solana Bridge
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+📦 Step 1: Generate test configuration
+─────────────────────────────────────
+✓ Generated test wallets:
+  Fee payer: 9xQeW...
+  Alice:     3K9Y...
+  Bob:       5J7X...
+
+💰 Step 2: Check fee payer balance
+─────────────────────────────────────
+Current balance: 0 SOL
+⚠️  Balance too low, requesting airdrop...
+✓ Airdrop successful! New balance: 1 SOL
+
+🌉 Step 3: Initialize bridge
+─────────────────────────────────────
+✓ Bridge initialized
+
+👂 Step 4: Register event listeners
+─────────────────────────────────────
+✓ Event listener registered
+
+🎮 Step 5: Get completed room state
+─────────────────────────────────────
+Using test fixture (no live API call)
+✓ Room state loaded:
+  Room ID: rm_test_fixture_001
+  Status:  completed
+  Seats:   alice vs bob
+  Scores:  3 - 2
+
+🔨 Step 6: Settle match on-chain
+─────────────────────────────────────
+[Bridge] Settling match for room rm_test_fixture_001
+[Bridge]   Agent A: alice (wallet: 3K9Y...)
+[Bridge]   Agent B: bob (wallet: 5J7X...)
+[Bridge]   Scores: 3 - 2
+[Bridge] Match not found on-chain, creating and locking...
+[Bridge] Match created, joined, and locked
+[Bridge] Match settled: 4xT9...
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  📊 score.settled Event Received
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+Match ID:    rm_test_fixture_001
+Room ID:     rm_test_fixture_001
+Scores:      alice (3) vs bob (2)
+Last Clash:  windUp_beats_feint
+TX:          4xT9...
+Score PDAs:
+  A: FsQ8...
+  B: 2mK4...
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+✓ Settlement successful!
+  TX: 4xT9...
+
+🔍 Step 7: Verify score PDAs on-chain
+─────────────────────────────────────
+✓ Score PDA A exists: FsQ8...
+  Size: 64 bytes
+✓ Score PDA B exists: 2mK4...
+  Size: 64 bytes
+
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+  E2E Test Summary
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+✓ Wallets generated (alice, bob, fee payer)
+✓ Fee payer funded with SOL
+✓ Bridge initialized
+✓ Room state loaded (fixture)
+✓ Match settled on-chain
+✓ Score PDAs created
+✓ score.settled event emitted
+━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+🎉 E2E Test PASSED
+```
+
+### Manual Testing Against Live Workers API
+
+To test with a real completed room from the match-server:
+
+```bash
+# Run E2E test with live room ID
+npm run e2e -- --room=rm_abc123
+```
+
+This requires:
+- Match-server running (Cloudflare Workers)
+- A completed room with status `completed`
+- Agent IDs match those in your wallet mapping
+
+### Exact E2E Test Steps (Manual)
+
+#### Step 1: Start Localnet Validator
 
 ```bash
 cd solana
 ./scripts/start-validator.sh
 ```
 
-2. **Program deployed:**
+**Expected:** Validator runs on `http://127.0.0.1:8899`
+
+#### Step 2: Deploy Program
 
 ```bash
 cd solana
@@ -237,32 +367,119 @@ anchor build --no-idl
 anchor deploy
 ```
 
-3. **Match-server room completed:**
+**Expected:** Program deployed, ID printed (e.g., `HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM`)
 
-Create and complete a match on the match-server (see `packages/match-server/README.md`), or use an existing completed room ID.
-
-### Test Flow
+#### Step 3: Generate Test Wallets
 
 ```bash
-# 1. Airdrop SOL to fee payer
-solana airdrop 10 <FEE_PAYER_ADDRESS> --url http://127.0.0.1:8899
-
-# 2. Run bridge against completed room
 cd solana/bridge
 npm install
-npm run dev -- --room=rm_abc123
 
-# 3. Verify settlement on-chain
+# Option A: Use E2E script (generates wallets automatically)
+npm run e2e
+
+# Option B: Generate manually
+solana-keygen new --outfile alice.json
+solana-keygen new --outfile bob.json
+solana-keygen new --outfile fee-payer.json
+```
+
+**Expected:** Three keypairs generated
+
+#### Step 4: Map Agent IDs to Wallets
+
+Create `.env` file:
+
+```bash
+cd solana/bridge
+cat > .env << EOF
+SOLANA_RPC_URL=http://127.0.0.1:8899
+MATCH_SERVER_URL=https://telegraph-duel-match.marvelus-tech.workers.dev
+AGENT_WALLET_MAP=alice:<alice-pubkey>,bob:<bob-pubkey>
+FEE_PAYER_PRIVATE_KEY=<fee-payer-base64-secret>
+PROGRAM_ID=HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM
+EOF
+```
+
+**Or use the E2E test which generates wallets automatically.**
+
+#### Step 5: Airdrop SOL to Fee Payer
+
+```bash
+# If using E2E script, this is automatic
+npm run e2e
+
+# If manual:
+solana airdrop 1 <FEE_PAYER_ADDRESS> --url http://127.0.0.1:8899
+```
+
+**Expected:** Fee payer has >= 0.1 SOL
+
+#### Step 6: Run Bridge Settlement
+
+```bash
+# Option A: E2E test (uses fixture)
+npm run e2e
+
+# Option B: Manual with fixture (no live API)
+npm run dev
+# (Enter agent IDs when prompted: alice,bob)
+# (Enter room ID: rm_test_fixture_001)
+
+# Option C: Live room from Workers API
+npm run dev -- --room=rm_abc123
+```
+
+**Expected:**
+- Bridge creates/joins/locks match if not on-chain
+- Calls `settleMatch` with scores
+- Emits `score.settled` event
+- Prints transaction signature
+
+#### Step 7: Verify Score PDAs
+
+```bash
+# Get score PDA addresses from event output, then:
 solana account <SCORE_PDA_A> --url http://127.0.0.1:8899
 solana account <SCORE_PDA_B> --url http://127.0.0.1:8899
 ```
 
-**Expected result:**
-- Bridge fetches room state from match-server
-- Maps agentIds to wallets
-- Calls `settleMatch` instruction
-- Emits `score.settled` event with transaction signature
-- Score PDAs are updated with wins/losses/total_score
+**Expected:** PDAs exist with data (64 bytes each)
+
+### E2E Checklist
+
+Before considering E2E complete, verify:
+
+- [ ] Localnet validator running
+- [ ] Program deployed to localnet
+- [ ] Two distinct agent wallets generated (alice, bob)
+- [ ] Fee payer wallet funded with >= 0.1 SOL
+- [ ] Bridge runs without errors
+- [ ] Match created/joined/locked on-chain (if not existing)
+- [ ] `settleMatch` instruction succeeds
+- [ ] `score.settled` event emitted with:
+  - [ ] `matchId` / `roomId`
+  - [ ] `scores.A` and `scores.B`
+  - [ ] `agentIds.A` and `agentIds.B`
+  - [ ] `lastClash.reason` (if available)
+  - [ ] `txSignature`
+  - [ ] `scorePDAs.A` and `scorePDAs.B`
+- [ ] Score PDAs exist on-chain
+- [ ] Transaction signature is valid
+
+### Fixture vs. Live API
+
+**Fixture mode** (default for E2E test):
+- Uses `COMPLETED_ROOM_FIXTURE` from `src/fixtures.ts`
+- No live Workers API required
+- Faster, deterministic
+- Recommended for CI/CD
+
+**Live API mode**:
+- Fetches real room from match-server
+- Requires completed room on Workers
+- Tests full API integration
+- Use for integration testing
 
 ## Event Schema
 
