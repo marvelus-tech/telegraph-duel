@@ -15,11 +15,12 @@ export type GameEventType =
   | 'agent:panic'    // Agent fails to commit (reserved)
   | 'clash:resolve'  // Round winner determined
   | 'round:end'      // Round completes
-  | 'match:end';     // Match completes
+  | 'match:end'      // Match completes
+  | 'score.settled'; // Dex score settlement on-chain
 
 export interface GameEvent {
   type: GameEventType;
-  data?: Record<string, unknown>;
+  payload?: Record<string, unknown>;
   timestamp: number;
 }
 
@@ -42,10 +43,10 @@ export class EventBus {
     }
   }
 
-  emit(type: GameEventType, data?: Record<string, unknown>): void {
+  emit(type: GameEventType, payload?: Record<string, unknown>): void {
     const event: GameEvent = {
       type,
-      data,
+      payload,
       timestamp: Date.now(),
     };
 

@@ -11,18 +11,20 @@ import { eventBus, GameEvent } from './src/bus/EventBus';
 
 // Subscribe to specific event
 eventBus.on('match:start', (event: GameEvent) => {
-  console.log('Match started', event.data);
+  console.log('Match started', event.payload);
 });
 
 // Subscribe to all events (wildcard)
 eventBus.on('*' as any, (event: GameEvent) => {
-  console.log(event.type, event.data);
+  console.log(event.type, event.payload);
 });
 ```
 
 ## Event Types
 
 All events include `timestamp` (number, ms since epoch).
+
+**Note**: Events use `payload` field (matching Worker WebSocket contract), not `data`.
 
 ### Match Lifecycle
 
@@ -32,7 +34,7 @@ Emitted when a new match begins (best-of-5).
 ```typescript
 {
   type: 'match:start',
-  data: {
+  payload: {
     agent1: string,  // Agent 1 name
     agent2: string   // Agent 2 name
   },
@@ -41,15 +43,16 @@ Emitted when a new match begins (best-of-5).
 ```
 
 #### `match:end`
-Emitted when match completes (one agent reaches 3 points).
+Emitted when match completes (one agent reaches 3 points). Uses Worker canonical field names.
 
 ```typescript
 {
   type: 'match:end',
-  data: {
-    winner: string,      // Winning agent name
-    finalScore1: number, // Agent 1 final score
-    finalScore2: number  // Agent 2 final score
+  payload: {
+    winner: string,        // Winning agentId
+    finalScoresA: number,  // Seat A final score
+    finalScoresB: number,  // Seat B final score
+    reason: string         // e.g., 'best_of_5_complete'
   },
   timestamp: number
 }
@@ -63,7 +66,7 @@ Emitted at the beginning of each round.
 ```typescript
 {
   type: 'round:start',
-  data: {
+  payload: {
     round: number  // Current round number (1-5)
   },
   timestamp: number
@@ -76,7 +79,7 @@ Emitted after clash resolution.
 ```typescript
 {
   type: 'round:end',
-  data: {
+  payload: {
     round: number,  // Completed round number
     winner: string  // Round winner name
   },
@@ -92,7 +95,7 @@ Emitted when both agents enter wind-up phase (charge phase).
 ```typescript
 {
   type: 'agent:windUp',
-  data: {
+  payload: {
     agent1: string,  // Agent 1 name
     agent2: string   // Agent 2 name
   },
@@ -106,7 +109,7 @@ Emitted when an agent performs a feint (fake commit during feint window).
 ```typescript
 {
   type: 'agent:feint',
-  data: {
+  payload: {
     agent: string  // Agent name who feinted
   },
   timestamp: number
@@ -119,7 +122,7 @@ Emitted when an agent commits their attack.
 ```typescript
 {
   type: 'agent:commit',
-  data: {
+  payload: {
     agent: string  // Agent name who committed
   },
   timestamp: number
@@ -132,7 +135,7 @@ Reserved for future use (agent fails to commit in time).
 ```typescript
 {
   type: 'agent:panic',
-  data: {
+  payload: {
     agent: string  // Agent name who panicked
   },
   timestamp: number
@@ -147,7 +150,7 @@ Emitted when round clash is resolved and winner determined.
 ```typescript
 {
   type: 'clash:resolve',
-  data: {
+  payload: {
     winner: string,      // Winning agent name
     loser: string,       // Losing agent name
     winnerScore: number, // Winner's new total score
@@ -195,9 +198,61 @@ When extending the game, add new event types to `GameEventType` union in `src/bu
 - Payload shape
 - Example
 
+### Settlement
+
+#### `score.settled`
+Emitted by Dex bridge after on-chain settlement (following `match:end`). Includes Solana transaction details and score PDAs.
+
+**Source**: Solana bridge (not emitted by Phaser local demo or match-server Worker).
+
+```typescript
+{
+  type: 'score.settled',
+  payload: {
+    roomId: string,           // Room identifier
+    matchId: string,          // Match identifier (same as roomId in v1)
+    winnerAgentId: string,    // Winning agent ID
+    winnerSeat: 'A' | 'B',    // Winning seat
+    finalScoresA: number,     // Seat A final score
+    finalScoresB: number,     // Seat B final score
+    agentIdA: string,         // Agent ID in seat A
+    agentIdB: string,         // Agent ID in seat B
+    walletA: string,          // Wallet pubkey for seat A (base58)
+    walletB: string,          // Wallet pubkey for seat B (base58)
+    scorePdaA: string,        // Score PDA for seat A (base58)
+    scorePdaB: string,        // Score PDA for seat B (base58)
+    txSig: string,            // Solana transaction signature
+    lastClashReason?: string  // Optional final clash reason
+  },
+  timestamp: number
+}
+```
+
+**Field alignment**:
+- `match:end` uses `finalScoresA`/`finalScoresB` (Worker canonical names)
+- `score.settled` also uses `finalScoresA`/`finalScoresB` (aligned with Worker)
+
+## Solana Settlement Flow
+
+The Dex bridge polls completed rooms from the match-server and settles scores on-chain:
+
+1. **Match completes**: Worker emits `match:end` with `finalScoresA`/`finalScoresB`
+2. **Bridge polls**: Dex bridge fetches completed room state via `GET /rooms/:id`
+3. **Settlement**: Bridge calls `settleMatch` instruction on Solana program
+4. **Event emission**: Bridge emits `score.settled` with transaction signature and PDAs
+
+**Key points**:
+- Bridge maps `agentId` → wallet pubkey via environment configuration
+- Spectator clients can listen for `score.settled` to display on-chain confirmation
+- HUD can show settlement status with room ID, winner, scores, tx signature, and PDAs
+- Settlement is asynchronous (may occur seconds after `match:end`)
+
+See [solana/bridge/README.md](./solana/bridge/README.md) for bridge implementation details.
+
 ## Notes for Solana Integration
 
 - All agent names are placeholder strings (e.g., "BlitzBot", "ShieldWall")
-- No wallet addresses or on-chain state in current spike
-- Dex can map event data to Solana transactions/state as needed
+- Wallets are NOT included in Worker events (only in `score.settled` from bridge)
+- Dex bridge maps `agentId` → wallet via config/env
 - Event timing reflects client-side game simulation only
+- Settlement happens asynchronously after match completion
