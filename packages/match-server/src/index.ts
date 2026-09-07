@@ -49,13 +49,23 @@ export default {
         const id = env.MATCH_ROOM.idFromName(roomId);
         const room = env.MATCH_ROOM.get(id);
         
-        const initRequest = new Request('http://internal/init', {
+        const initRequest = new Request('http://do/init', {
           method: 'POST',
-          body: JSON.stringify({ roomId, config: body.config }),
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ roomId, config: body.config || {} }),
         });
 
-        const stub = room as unknown as { initialize: (roomId: string, config: any) => void };
-        stub.initialize(roomId, body.config || {});
+        const initResponse = await room.fetch(initRequest);
+        
+        if (!initResponse.ok) {
+          return new Response(JSON.stringify({ error: 'Failed to initialize room' }), {
+            status: 500,
+            headers: {
+              'Content-Type': 'application/json',
+              ...corsHeaders(origin),
+            },
+          });
+        }
 
         return new Response(JSON.stringify({
           roomId,

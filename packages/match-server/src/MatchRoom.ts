@@ -1,10 +1,14 @@
 import { DurableObject } from 'cloudflare:workers';
-import type { RoomState, IntentRequest, GameEvent, Seat, IntentType } from './types';
+import type { RoomState, IntentRequest, GameEvent, Seat, IntentType, RoomConfig } from './types';
 
 const DEFAULT_ROUNDS = 5;
 const DEFAULT_WINDOW_MS = 5000;
 const WIND_UP_DURATION = 800;
 const FEINT_WINDOW = 400;
+
+interface Env {
+  // Environment bindings (empty for now)
+}
 
 export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
@@ -13,10 +17,21 @@ export class MatchRoom extends DurableObject {
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
+    
+    this.ctx.blockConcurrencyWhile(async () => {
+      const stored = await this.ctx.storage.get<RoomState>('state');
+      if (stored) {
+        this.state = stored;
+      }
+    });
   }
 
   async fetch(request: Request): Promise<Response> {
     const url = new URL(request.url);
+    
+    if (url.pathname.endsWith('/init') && request.method === 'POST') {
+      return this.handleInit(request);
+    }
     
     if (url.pathname.endsWith('/watch')) {
       return this.handleWebSocket(request);
@@ -35,6 +50,30 @@ export class MatchRoom extends DurableObject {
     }
 
     return new Response('Not found', { status: 404 });
+  }
+
+  private async handleInit(request: Request): Promise<Response> {
+    try {
+      const body = await request.json() as { roomId: string; config?: Partial<RoomConfig> };
+      
+      if (!body.roomId) {
+        return new Response(JSON.stringify({ error: 'Missing roomId' }), {
+          status: 400,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+
+      await this.initialize(body.roomId, body.config || {});
+
+      return new Response(JSON.stringify(this.state), {
+        headers: { 'Content-Type': 'application/json' },
+      });
+    } catch (e) {
+      return new Response(JSON.stringify({ error: 'Initialization failed' }), {
+        status: 500,
+        headers: { 'Content-Type': 'application/json' },
+      });
+    }
   }
 
   private async handleWebSocket(request: Request): Promise<Response> {
@@ -110,6 +149,8 @@ export class MatchRoom extends DurableObject {
       this.startMatch();
     }
 
+    await this.saveState();
+
     return new Response(JSON.stringify({
       roomId: this.state.roomId,
       agentId: body.agentId,
@@ -162,6 +203,8 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     };
 
+    await this.saveState();
+
     this.broadcast({
       type: `agent:${intent.type}`,
       payload: {
@@ -189,7 +232,7 @@ export class MatchRoom extends DurableObject {
     return null;
   }
 
-  initialize(roomId: string, config: { rounds?: number; windowMs?: number } = {}): void {
+  async initialize(roomId: string, config: { rounds?: number; windowMs?: number } = {}): Promise<void> {
     this.state = {
       roomId,
       status: 'waiting',
@@ -203,6 +246,13 @@ export class MatchRoom extends DurableObject {
       createdAt: new Date().toISOString(),
       intents: {},
     };
+    await this.saveState();
+  }
+
+  private async saveState(): Promise<void> {
+    if (this.state) {
+      await this.ctx.storage.put('state', this.state);
+    }
   }
 
   private startMatch(): void {
@@ -233,6 +283,8 @@ export class MatchRoom extends DurableObject {
     this.state.currentRound++;
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
+
+    this.saveState();
 
     const windowStartMs = this.state.roundStartTime;
     const windowEndMs = windowStartMs + this.state.config.windowMs;
@@ -303,6 +355,8 @@ export class MatchRoom extends DurableObject {
     const loser: Seat = winner === 'A' ? 'B' : 'A';
     this.state.scores[winner]++;
 
+    this.saveState();
+
     this.broadcast({
       type: 'clash:resolve',
       payload: {
@@ -351,6 +405,7 @@ export class MatchRoom extends DurableObject {
     });
 
     this.state.status = 'completed';
+    this.saveState();
   }
 
   private broadcast(event: GameEvent): void {
