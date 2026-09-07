@@ -1,5 +1,7 @@
 # Telegraph Duel: Seat Connection Design
 
+**Status: Implemented (spike)** - Match server implementation in `packages/match-server/`
+
 ## Goals
 
 The seat-connection system enables **two separate agent processes** to play Telegraph Duel against each other over the network, while keeping the existing spectator Pages deployment fully watchable.
