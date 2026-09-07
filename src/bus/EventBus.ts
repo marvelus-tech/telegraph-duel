@@ -15,7 +15,8 @@ export type GameEventType =
   | 'agent:panic'    // Agent fails to commit (reserved)
   | 'clash:resolve'  // Round winner determined
   | 'round:end'      // Round completes
-  | 'match:end';     // Match completes
+  | 'match:end'      // Match completes
+  | 'score.settled'; // Dex score settlement on-chain
 
 export interface GameEvent {
   type: GameEventType;

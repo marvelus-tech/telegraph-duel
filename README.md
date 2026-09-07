@@ -76,7 +76,9 @@ eventBus.on('match:start', (event) => {
 });
 ```
 
-**Key Events**: `match:start`, `round:start`, `agent:commit`, `clash:resolve`, `match:end`
+**Key Events**: `match:start`, `round:start`, `agent:commit`, `clash:resolve`, `match:end`, `score.settled`
+
+The `score.settled` event fires when Dex settles match scores on-chain (includes tx signature and PDAs).
 
 See [`EVENTBUS.md`](./EVENTBUS.md) for payload shapes and ordering guarantees.
 

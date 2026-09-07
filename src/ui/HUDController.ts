@@ -125,6 +125,13 @@ export class HUDController {
       case 'match:end':
         message = `<span class="timestamp">${time}</span> 🏆 <strong>${event.data?.winner}</strong> wins the match! (${event.data?.finalScore1}-${event.data?.finalScore2})`;
         break;
+      case 'score.settled':
+        const txShort = (event.data?.txSignature as string)?.slice(0, 8) || 'unknown';
+        const reason = event.data?.lastClash?.reason || 'completed';
+        const scoresA = event.data?.scores?.A || 0;
+        const scoresB = event.data?.scores?.B || 0;
+        message = `<span class="timestamp">${time}</span> SETTLED tx ${txShort}… reason ${reason} scores ${scoresA}-${scoresB}`;
+        break;
     }
 
     if (message) {

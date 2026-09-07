@@ -195,6 +195,40 @@ When extending the game, add new event types to `GameEventType` union in `src/bu
 - Payload shape
 - Example
 
+### Settlement
+
+#### `score.settled`
+Emitted when match scores are settled on-chain via Dex (after `match:end`).
+
+```typescript
+{
+  type: 'score.settled',
+  data: {
+    matchId: string,          // Match identifier
+    roomId: string,           // Room identifier
+    scores: {
+      A: number,              // Final score for seat A
+      B: number               // Final score for seat B
+    },
+    agentIds: {
+      A: string,              // Agent ID in seat A
+      B: string               // Agent ID in seat B
+    },
+    lastClash?: {
+      reason: string          // Optional clash outcome reason
+    },
+    txSignature: string,      // Solana transaction signature
+    scorePDAs: {
+      A: string,              // Score PDA for seat A
+      B: string               // Score PDA for seat B
+    }
+  },
+  timestamp: number
+}
+```
+
+**Note**: Live `match:end` events use `finalScore1`/`finalScore2` field names (from Worker), while `score.settled` uses `scores.A`/`scores.B` (Dex payload).
+
 ## Notes for Solana Integration
 
 - All agent names are placeholder strings (e.g., "BlitzBot", "ShieldWall")
