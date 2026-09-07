@@ -77,6 +77,7 @@ export function loadConfig(): BridgeConfig & { feePayerKeypair: Keypair } {
     feePayerKeypair,
     programId: new PublicKey(programIdStr),
     pollIntervalMs,
+    publishSettlementEvents: process.env.PUBLISH_SETTLEMENT_EVENTS === 'true',
   };
 
   return config;
@@ -109,6 +110,7 @@ export function createTestConfig(options: {
     feePayerKeypair,
     programId: new PublicKey('HLnw6FpGrfM7RD37gEMisMMA473GRtQ6zECMkdPqcbmM'),
     pollIntervalMs: 5000,
+    publishSettlementEvents: process.env.PUBLISH_SETTLEMENT_EVENTS === 'true',
     agentKeypairs,
   };
 }
