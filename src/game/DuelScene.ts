@@ -28,8 +28,11 @@ export class DuelScene extends Phaser.Scene {
   }
 
   create(): void {
-    // Check if spectator mode is enabled
-    this.spectatorMode = (this.game.config as any).spectatorMode || false;
+    // Detect spectator mode by reading URL params directly
+    // This is more reliable than reading from game.config custom fields
+    const params = new URLSearchParams(window.location.search);
+    const roomParam = params.get('room');
+    this.spectatorMode = !!roomParam;
 
     // Light arena background
     this.cameras.main.setBackgroundColor('#e8f4f8');
@@ -44,7 +47,7 @@ export class DuelScene extends Phaser.Scene {
     this.createVisuals();
 
     if (this.spectatorMode) {
-      console.log('[DuelScene] Spectator mode: listening for remote events');
+      console.log('[DuelScene] Spectator mode enabled (room=' + roomParam + '): listening for remote events only, NOT starting local AI');
       this.setupSpectatorListeners();
     } else {
       console.log('[DuelScene] Local mode: starting auto-play match');
