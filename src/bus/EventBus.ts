@@ -43,10 +43,10 @@ export class EventBus {
     }
   }
 
-  emit(type: GameEventType, payload?: Record<string, unknown>): void {
+  emit(type: GameEventType, payload?: unknown): void {
     const event: GameEvent = {
       type,
-      payload,
+      payload: payload as Record<string, unknown> | undefined,
       timestamp: Date.now(),
     };
 
