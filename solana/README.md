@@ -46,6 +46,64 @@ This implementation **aligns with** the existing `EVENTBUS.md` contract at the r
 
 **Design Principle**: Only match start/end touch L1. All per-round/per-tick events stay off-chain for performance.
 
+## Match-Server Bridge
+
+The `bridge/` directory contains a new bridge that connects the **match-server** (Cloudflare Workers) to Solana settlement.
+
+### Bridge Architecture
+
+```
+Match Server (Workers)         Bridge (Node.js)              Solana Program
+     │                              │                              │
+     │  GET /rooms/:id              │                              │
+     │  (status: completed)         │                              │
+     ├─────────────────────────────>│                              │
+     │                              │                              │
+     │  Room state (scores,         │  Map agentId → wallet        │
+     │  agentIds, lastClash)        │  (via config/env)            │
+     │<─────────────────────────────┤                              │
+     │                              │                              │
+     │                              │  settleMatch TX              │
+     │                              ├─────────────────────────────>│
+     │                              │                              │
+     │                              │  Emit score.settled event    │
+```
+
+### Usage
+
+```bash
+cd solana/bridge
+npm install
+
+# Interactive demo (generates test wallets)
+npm run dev
+
+# Settle specific room
+npm run dev -- --room=rm_abc123
+
+# Continuous polling
+npm run dev -- --poll=rm_abc123,rm_def456
+```
+
+See [`bridge/README.md`](./bridge/README.md) for detailed documentation.
+
+### Key Features
+
+- **Polling-based**: Polls match-server API for completed rooms
+- **Agent ID mapping**: Maps seat A/B agentIds to Solana wallets (config/env)
+- **Auto-settlement**: Calls `settleMatch` instruction when match completes
+- **Event emission**: Emits `score.settled` with tx signature and score PDAs
+- **Draft fee payer**: Uses designated wallet to pay transaction fees
+
+### Integration Points
+
+1. **Match-server API**: `GET /rooms/:id` for completed room state
+2. **Solana program**: `settleMatch` instruction with scores
+3. **Configuration**: Environment variables for wallet mapping
+4. **Events**: `score.settled` event with settlement details
+
+For complete spec, see [`docs/MATCH_END_SCORE_PDA.md`](./docs/MATCH_END_SCORE_PDA.md).
+
 ## Directory Structure
 
 ```
@@ -66,11 +124,21 @@ solana/
 │       ├── bridge.ts         # SolanaEventBridge (game → Solana)
 │       ├── types.ts          # TypeScript types (aligned with EVENTBUS.md)
 │       └── utils.ts          # Helper functions
+├── bridge/                   # Match-server → Solana bridge (NEW)
+│   ├── README.md             # Bridge documentation
+│   ├── src/
+│   │   ├── bridge.ts         # MatchServerBridge (match-server → Solana)
+│   │   ├── config.ts         # Configuration loader
+│   │   ├── types.ts          # Bridge types
+│   │   └── demo.ts           # Demo script
+│   └── package.json
 ├── scripts/
 │   ├── start-validator.sh    # Start local Solana validator
 │   ├── deploy-local.sh       # Deploy to localnet
 │   ├── demo.js               # Two-player demo (O testing gate)
 │   └── setup-devnet.sh       # Deploy to devnet
+├── docs/
+│   └── MATCH_END_SCORE_PDA.md # Score PDA settlement spec
 └── README.md                 # This file
 ```
 

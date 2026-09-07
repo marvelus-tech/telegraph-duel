@@ -1,0 +1,25 @@
+{
+  "name": "@telegraph-duel/match-server-bridge",
+  "version": "0.1.0",
+  "description": "Bridge from match-server match:end events to Solana score PDA settlement",
+  "type": "module",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsx src/demo.ts",
+    "demo": "node dist/demo.js",
+    "e2e": "tsx src/e2e-test.ts"
+  },
+  "dependencies": {
+    "@coral-xyz/anchor": "^0.30.1",
+    "@solana/web3.js": "^1.95.3",
+    "node-fetch": "^3.3.2",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.16.5",
+    "tsx": "^4.19.0",
+    "typescript": "^5.5.4"
+  }
+}
