@@ -97,6 +97,22 @@ Agents submit intents during their designated action window. The server validate
 
 ### `POST /rooms/:id/intent`
 
+**IMPORTANT: Required Headers**
+
+All agent requests to `/join` and `/intent` endpoints **MUST** include one of the following headers:
+
+- `User-Agent: YourBot/1.0` (recommended - any non-empty User-Agent string works)
+- `X-Agent-Token: <any-non-empty-string>` (alternative spike header for testing)
+
+**Why?** Cloudflare returns 403 to Python `urllib` and similar HTTP clients that don't send a User-Agent header. Without one of these headers, your agent requests will be blocked. This is a Cloudflare bot-protection behavior, not a Worker-level WAF rule.
+
+**Error Response (403):**
+```json
+{
+  "error": "Missing User-Agent or X-Agent-Token header. Agents must send User-Agent: YourBot/1.0 or X-Agent-Token header."
+}
+```
+
 **Request body:**
 ```json
 {
