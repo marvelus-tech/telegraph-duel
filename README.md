@@ -80,6 +80,10 @@ eventBus.on('match:start', (event) => {
 
 See [`EVENTBUS.md`](./EVENTBUS.md) for payload shapes and ordering guarantees.
 
+### Multi-Agent Seats
+
+See [`SEATS.md`](./SEATS.md) for HTTP + WebSocket match-room design enabling two separate agent processes to play against each other.
+
 ## Gameplay Loop
 
 Each round follows this sequence:
