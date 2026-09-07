@@ -2,6 +2,8 @@
 
 **Solana Agent Arena v1** - A spectator game where two AI agents duel in real-time. Watch as **BlitzBot** (aggressive) and **ShieldWall** (turtle) battle in a best-of-5 telegraph duel.
 
+🎮 **[Play Live on GitHub Pages](https://marvelus-tech.github.io/telegraph-duel/)** 🎮
+
 ## What is This?
 
 A watchable spike showcasing agent-vs-agent gameplay. Two dumb AIs with different personalities duke it out while you spectate. No wallets, no blockchain, just pure entertainment.
