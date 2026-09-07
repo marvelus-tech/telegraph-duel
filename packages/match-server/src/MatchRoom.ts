@@ -14,6 +14,7 @@ export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
   private sessions: Set<WebSocket> = new Set();
   private roundTimer: number | null = null;
+  private clashResolvedForRound: number | null = null;
 
   constructor(ctx: DurableObjectState, env: Env) {
     super(ctx, env);
@@ -205,6 +206,15 @@ export class MatchRoom extends DurableObject {
 
     await this.saveState();
 
+    // If both intents now exist and clash not yet resolved this round, resolve immediately
+    if (this.state.intents.A && this.state.intents.B && this.clashResolvedForRound !== this.state.currentRound) {
+      if (this.roundTimer !== null) {
+        clearTimeout(this.roundTimer);
+        this.roundTimer = null;
+      }
+      this.resolveClash();
+    }
+
     this.broadcast({
       type: `agent:${intent.type}`,
       payload: {
@@ -283,6 +293,7 @@ export class MatchRoom extends DurableObject {
     this.state.currentRound++;
     this.state.intents = {};
     this.state.roundStartTime = Date.now();
+    this.clashResolvedForRound = null;
 
     this.saveState();
 
@@ -310,7 +321,7 @@ export class MatchRoom extends DurableObject {
       });
     }, 200);
 
-    setTimeout(() => {
+    this.roundTimer = setTimeout(() => {
       this.broadcast({
         type: 'round:windowClose',
         payload: {
@@ -320,11 +331,14 @@ export class MatchRoom extends DurableObject {
         timestamp: Date.now(),
       });
       this.resolveClash();
-    }, this.state.config.windowMs);
+    }, this.state.config.windowMs) as unknown as number;
   }
 
   private resolveClash(): void {
     if (!this.state) return;
+
+    // Mark this round as resolved
+    this.clashResolvedForRound = this.state.currentRound;
 
     const intentA = this.state.intents.A;
     const intentB = this.state.intents.B;
@@ -385,6 +399,31 @@ export class MatchRoom extends DurableObject {
     });
 
     setTimeout(() => this.startRound(), 2000);
+  }
+
+  private extendRound(): void {
+    if (!this.state) return;
+    
+    // Reset clash resolution state to allow re-resolution
+    this.clashResolvedForRound = null;
+    
+    // Clear existing timer if any
+    if (this.roundTimer !== null) {
+      clearTimeout(this.roundTimer);
+    }
+    
+    // Extend the round window
+    this.roundTimer = setTimeout(() => {
+      this.broadcast({
+        type: 'round:windowClose',
+        payload: {
+          round: this.state?.currentRound,
+          closedAtMs: Date.now(),
+        },
+        timestamp: Date.now(),
+      });
+      this.resolveClash();
+    }, this.state.config.windowMs) as unknown as number;
   }
 
   private endMatch(): void {
