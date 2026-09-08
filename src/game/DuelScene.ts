@@ -14,6 +14,10 @@ export class DuelScene extends Phaser.Scene {
   private cooldownRing2!: Phaser.GameObjects.Arc;
   private chargeBar1!: Phaser.GameObjects.Graphics;
   private chargeBar2!: Phaser.GameObjects.Graphics;
+  private stanceLabel1!: Phaser.GameObjects.Text;
+  private stanceLabel2!: Phaser.GameObjects.Text;
+  private stanceRing1!: Phaser.GameObjects.Arc;
+  private stanceRing2!: Phaser.GameObjects.Arc;
 
   private roundActive = false;
   private roundStartTime = 0;
@@ -74,9 +78,88 @@ export class DuelScene extends Phaser.Scene {
     this.cooldownRing2 = this.add.circle(centerX + 200, centerY, 55, 0x666666, 0);
     this.cooldownRing2.setStrokeStyle(4, 0x666666, 0.3);
 
+    // Stance rings - larger, colored rings that appear during actions
+    this.stanceRing1 = this.add.circle(centerX - 200, centerY, 70, 0x000000, 0);
+    this.stanceRing1.setStrokeStyle(6, 0x000000, 0);
+
+    this.stanceRing2 = this.add.circle(centerX + 200, centerY, 70, 0x000000, 0);
+    this.stanceRing2.setStrokeStyle(6, 0x000000, 0);
+
+    // Stance labels
+    this.stanceLabel1 = this.add.text(centerX - 200, centerY + 80, '', {
+      fontSize: '16px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#333',
+      fontStyle: 'bold',
+      align: 'center',
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      padding: { x: 8, y: 4 }
+    });
+    this.stanceLabel1.setOrigin(0.5, 0.5);
+    this.stanceLabel1.setVisible(false);
+
+    this.stanceLabel2 = this.add.text(centerX + 200, centerY + 80, '', {
+      fontSize: '16px',
+      fontFamily: 'Arial, sans-serif',
+      color: '#333',
+      fontStyle: 'bold',
+      align: 'center',
+      backgroundColor: 'rgba(255, 255, 255, 0.9)',
+      padding: { x: 8, y: 4 }
+    });
+    this.stanceLabel2.setOrigin(0.5, 0.5);
+    this.stanceLabel2.setVisible(false);
+
     // Charge bars
     this.chargeBar1 = this.add.graphics();
     this.chargeBar2 = this.add.graphics();
+  }
+
+  private updateStanceVisuals(
+    agent: Agent,
+    sprite: Phaser.GameObjects.Graphics,
+    label: Phaser.GameObjects.Text,
+    ring: Phaser.GameObjects.Arc,
+    state: 'idle' | 'windUp' | 'commit' | 'feint' | 'triumph' | 'panic'
+  ): void {
+    const centerX = this.cameras.main.width / 2;
+    const centerY = this.cameras.main.height / 2;
+    const x = sprite === this.sprite1 ? centerX - 200 : centerX + 200;
+
+    this.drawAgentSprite(sprite, x, centerY, agent.state.color, state);
+
+    // Update stance label and ring
+    switch (state) {
+      case 'windUp':
+        label.setText('WIND-UP');
+        label.setVisible(true);
+        ring.setStrokeStyle(6, 0x4caf50, 0.7);
+        break;
+      case 'feint':
+        label.setText('FEINT');
+        label.setVisible(true);
+        ring.setStrokeStyle(6, 0xffeb3b, 0.9);
+        break;
+      case 'commit':
+        label.setText('COMMIT');
+        label.setVisible(true);
+        ring.setStrokeStyle(6, 0xff5722, 0.9);
+        break;
+      case 'triumph':
+        label.setText('WIN');
+        label.setVisible(true);
+        ring.setStrokeStyle(6, 0x4caf50, 0.8);
+        break;
+      case 'panic':
+        label.setText('PANIC');
+        label.setVisible(true);
+        ring.setStrokeStyle(6, 0x9e9e9e, 0.6);
+        break;
+      default:
+        label.setVisible(false);
+        ring.setStrokeStyle(6, 0x000000, 0);
+        break;
+    }
   }
 
   private drawAgentSprite(
@@ -88,9 +171,11 @@ export class DuelScene extends Phaser.Scene {
   ): void {
     graphics.clear();
 
-    const scale = state === 'windUp' ? 1.1 : state === 'commit' ? 0.9 : 1.0;
+    // More pronounced scale changes
+    const scale = state === 'windUp' ? 1.2 : state === 'commit' ? 0.85 : state === 'feint' ? 1.15 : 1.0;
     const radius = 40 * scale;
-    const alpha = state === 'feint' ? 0.5 : 1.0;
+    // More pronounced alpha for feint
+    const alpha = state === 'feint' ? 0.35 : 1.0;
 
     // Main body circle
     graphics.fillStyle(color, alpha);
@@ -163,6 +248,8 @@ export class DuelScene extends Phaser.Scene {
       this.agent2.state.isWindingUp = true;
       this.agent1.updateMood('Charging...');
       this.agent2.updateMood('Charging...');
+      this.updateStanceVisuals(this.agent1, this.sprite1, this.stanceLabel1, this.stanceRing1, 'windUp');
+      this.updateStanceVisuals(this.agent2, this.sprite2, this.stanceLabel2, this.stanceRing2, 'windUp');
       eventBus.emit('agent:windUp', {
         agent1: this.agent1.state.name,
         agent2: this.agent2.state.name,
@@ -204,15 +291,15 @@ export class DuelScene extends Phaser.Scene {
     agent.state.didFeint = true;
     agent.updateMood('Feinting!');
 
-    const x = sprite === this.sprite1 ? this.cameras.main.width / 2 - 200 : this.cameras.main.width / 2 + 200;
-    const y = this.cameras.main.height / 2;
-    this.drawAgentSprite(sprite, x, y, agent.state.color, 'feint');
+    const label = sprite === this.sprite1 ? this.stanceLabel1 : this.stanceLabel2;
+    const ring = sprite === this.sprite1 ? this.stanceRing1 : this.stanceRing2;
+    this.updateStanceVisuals(agent, sprite, label, ring, 'feint');
 
     eventBus.emit('agent:feint', { agent: agent.state.name });
 
     // Reset to wind-up after feint
     this.time.delayedCall(200, () => {
-      this.drawAgentSprite(sprite, x, y, agent.state.color, 'windUp');
+      this.updateStanceVisuals(agent, sprite, label, ring, 'windUp');
       agent.updateMood('Charging...');
     });
   }
@@ -222,9 +309,9 @@ export class DuelScene extends Phaser.Scene {
     agent.state.commitTime = Date.now();
     agent.updateMood('Committed!');
 
-    const x = sprite === this.sprite1 ? this.cameras.main.width / 2 - 200 : this.cameras.main.width / 2 + 200;
-    const y = this.cameras.main.height / 2;
-    this.drawAgentSprite(sprite, x, y, agent.state.color, 'commit');
+    const label = sprite === this.sprite1 ? this.stanceLabel1 : this.stanceLabel2;
+    const ring = sprite === this.sprite1 ? this.stanceRing1 : this.stanceRing2;
+    this.updateStanceVisuals(agent, sprite, label, ring, 'commit');
 
     eventBus.emit('agent:commit', { agent: agent.state.name });
 
@@ -283,8 +370,13 @@ export class DuelScene extends Phaser.Scene {
     const x1 = centerX - 200;
     const x2 = centerX + 200;
 
-    this.drawAgentSprite(winnerSprite, winner === this.agent1 ? x1 : x2, centerY, winner.state.color, 'triumph');
-    this.drawAgentSprite(loserSprite, loser === this.agent1 ? x1 : x2, centerY, loser.state.color, 'panic');
+    const winnerLabel = winner === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+    const winnerRing = winner === this.agent1 ? this.stanceRing1 : this.stanceRing2;
+    const loserLabel = loser === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+    const loserRing = loser === this.agent1 ? this.stanceRing1 : this.stanceRing2;
+
+    this.updateStanceVisuals(winner, winnerSprite, winnerLabel, winnerRing, 'triumph');
+    this.updateStanceVisuals(loser, loserSprite, loserLabel, loserRing, 'panic');
 
     eventBus.emit('clash:resolve', {
       winner: winner.state.name,
@@ -300,10 +392,8 @@ export class DuelScene extends Phaser.Scene {
 
     // Start next round
     this.time.delayedCall(2000, () => {
-      const x1 = centerX - 200;
-      const x2 = centerX + 200;
-      this.drawAgentSprite(this.sprite1, x1, centerY, this.agent1.state.color, 'idle');
-      this.drawAgentSprite(this.sprite2, x2, centerY, this.agent2.state.color, 'idle');
+      this.updateStanceVisuals(this.agent1, this.sprite1, this.stanceLabel1, this.stanceRing1, 'idle');
+      this.updateStanceVisuals(this.agent2, this.sprite2, this.stanceLabel2, this.stanceRing2, 'idle');
       this.startRound();
     });
   }
@@ -387,10 +477,8 @@ export class DuelScene extends Phaser.Scene {
       this.agent1.updateMood('Charging...');
       this.agent2.updateMood('Charging...');
       
-      const centerX = this.cameras.main.width / 2;
-      const centerY = this.cameras.main.height / 2;
-      this.drawAgentSprite(this.sprite1, centerX - 200, centerY, this.agent1.state.color, 'windUp');
-      this.drawAgentSprite(this.sprite2, centerX + 200, centerY, this.agent2.state.color, 'windUp');
+      this.updateStanceVisuals(this.agent1, this.sprite1, this.stanceLabel1, this.stanceRing1, 'windUp');
+      this.updateStanceVisuals(this.agent2, this.sprite2, this.stanceLabel2, this.stanceRing2, 'windUp');
     });
 
     eventBus.on('agent:feint', (event) => {
@@ -398,17 +486,16 @@ export class DuelScene extends Phaser.Scene {
       const payload = event.payload as { agent: string; seat?: string };
       const agent = payload.seat === 'A' || payload.agent === this.agent1.state.name ? this.agent1 : this.agent2;
       const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
+      const label = agent === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+      const ring = agent === this.agent1 ? this.stanceRing1 : this.stanceRing2;
       
       agent.state.didFeint = true;
       agent.updateMood('Feinting!');
       
-      const centerX = this.cameras.main.width / 2;
-      const centerY = this.cameras.main.height / 2;
-      const x = sprite === this.sprite1 ? centerX - 200 : centerX + 200;
-      this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'feint');
+      this.updateStanceVisuals(agent, sprite, label, ring, 'feint');
       
       this.time.delayedCall(200, () => {
-        this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'windUp');
+        this.updateStanceVisuals(agent, sprite, label, ring, 'windUp');
         agent.updateMood('Charging...');
       });
     });
@@ -418,15 +505,14 @@ export class DuelScene extends Phaser.Scene {
       const payload = event.payload as { agent: string; seat?: string };
       const agent = payload.seat === 'A' || payload.agent === this.agent1.state.name ? this.agent1 : this.agent2;
       const sprite = agent === this.agent1 ? this.sprite1 : this.sprite2;
+      const label = agent === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+      const ring = agent === this.agent1 ? this.stanceRing1 : this.stanceRing2;
       
       agent.state.hasCommitted = true;
       agent.state.commitTime = Date.now();
       agent.updateMood('Committed!');
       
-      const centerX = this.cameras.main.width / 2;
-      const centerY = this.cameras.main.height / 2;
-      const x = sprite === this.sprite1 ? centerX - 200 : centerX + 200;
-      this.drawAgentSprite(sprite, x, centerY, agent.state.color, 'commit');
+      this.updateStanceVisuals(agent, sprite, label, ring, 'commit');
     });
 
     eventBus.on('clash:resolve', (event) => {
@@ -437,6 +523,10 @@ export class DuelScene extends Phaser.Scene {
       const loser = winner === this.agent1 ? this.agent2 : this.agent1;
       const winnerSprite = winner === this.agent1 ? this.sprite1 : this.sprite2;
       const loserSprite = winner === this.agent1 ? this.sprite2 : this.sprite1;
+      const winnerLabel = winner === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+      const winnerRing = winner === this.agent1 ? this.stanceRing1 : this.stanceRing2;
+      const loserLabel = loser === this.agent1 ? this.stanceLabel1 : this.stanceLabel2;
+      const loserRing = loser === this.agent1 ? this.stanceRing1 : this.stanceRing2;
       
       this.cameras.main.shake(100, 0.002);
       
@@ -445,13 +535,8 @@ export class DuelScene extends Phaser.Scene {
       winner.updateMood('Victory!');
       loser.updateMood('Defeated...');
       
-      const centerX = this.cameras.main.width / 2;
-      const centerY = this.cameras.main.height / 2;
-      const x1 = centerX - 200;
-      const x2 = centerX + 200;
-      
-      this.drawAgentSprite(winnerSprite, winner === this.agent1 ? x1 : x2, centerY, winner.state.color, 'triumph');
-      this.drawAgentSprite(loserSprite, loser === this.agent1 ? x1 : x2, centerY, loser.state.color, 'panic');
+      this.updateStanceVisuals(winner, winnerSprite, winnerLabel, winnerRing, 'triumph');
+      this.updateStanceVisuals(loser, loserSprite, loserLabel, loserRing, 'panic');
     });
 
     eventBus.on('round:end', (event) => {
@@ -459,12 +544,8 @@ export class DuelScene extends Phaser.Scene {
       this.roundActive = false;
       
       this.time.delayedCall(2000, () => {
-        const centerX = this.cameras.main.width / 2;
-        const centerY = this.cameras.main.height / 2;
-        const x1 = centerX - 200;
-        const x2 = centerX + 200;
-        this.drawAgentSprite(this.sprite1, x1, centerY, this.agent1.state.color, 'idle');
-        this.drawAgentSprite(this.sprite2, x2, centerY, this.agent2.state.color, 'idle');
+        this.updateStanceVisuals(this.agent1, this.sprite1, this.stanceLabel1, this.stanceRing1, 'idle');
+        this.updateStanceVisuals(this.agent2, this.sprite2, this.stanceLabel2, this.stanceRing2, 'idle');
       });
     });
 

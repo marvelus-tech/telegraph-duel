@@ -5,21 +5,37 @@ export interface RoomConfig {
   roomId: string;
 }
 
+export type ConnectionState = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
+
 export class RoomClient {
   private ws: WebSocket | null = null;
   private config: RoomConfig;
   private reconnectAttempts = 0;
   private maxReconnectAttempts = 5;
   private reconnectDelay = 1000;
+  private connectionState: ConnectionState = 'connecting';
 
   constructor(config: RoomConfig) {
     this.config = config;
+  }
+
+  getConnectionState(): ConnectionState {
+    return this.connectionState;
+  }
+
+  private setConnectionState(state: ConnectionState): void {
+    if (this.connectionState !== state) {
+      this.connectionState = state;
+      eventBus.emit('connection:state', { state });
+      console.log('[RoomClient] Connection state:', state);
+    }
   }
 
   connect(): void {
     const wsUrl = this.config.apiBase.replace(/^http/, 'ws') + `/rooms/${this.config.roomId}/watch`;
     
     console.log('[RoomClient] Connecting to', wsUrl);
+    this.setConnectionState(this.reconnectAttempts > 0 ? 'reconnecting' : 'connecting');
 
     try {
       this.ws = new WebSocket(wsUrl);
@@ -27,6 +43,7 @@ export class RoomClient {
       this.ws.onopen = () => {
         console.log('[RoomClient] Connected');
         this.reconnectAttempts = 0;
+        this.setConnectionState('connected');
       };
 
       this.ws.onmessage = (event) => {
@@ -44,10 +61,12 @@ export class RoomClient {
 
       this.ws.onclose = () => {
         console.log('[RoomClient] Disconnected');
+        this.setConnectionState('disconnected');
         this.attemptReconnect();
       };
     } catch (e) {
       console.error('[RoomClient] Failed to create WebSocket:', e);
+      this.setConnectionState('disconnected');
       this.attemptReconnect();
     }
   }
@@ -61,6 +80,7 @@ export class RoomClient {
   private attemptReconnect(): void {
     if (this.reconnectAttempts >= this.maxReconnectAttempts) {
       console.error('[RoomClient] Max reconnection attempts reached');
+      this.setConnectionState('disconnected');
       return;
     }
 
@@ -68,6 +88,7 @@ export class RoomClient {
     const delay = this.reconnectDelay * Math.pow(2, this.reconnectAttempts - 1);
     
     console.log(`[RoomClient] Reconnecting in ${delay}ms (attempt ${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    this.setConnectionState('reconnecting');
     
     setTimeout(() => this.connect(), delay);
   }

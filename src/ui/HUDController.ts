@@ -7,9 +7,12 @@ export class HUDController {
   private maxLogItems = 10;
   private windowEndMs: number | null = null;
   private countdownInterval: number | null = null;
+  private connectionState: string = 'connecting';
+  private isSpectatorMode: boolean = false;
 
   constructor(hudElement: HTMLElement) {
     this.hudElement = hudElement;
+    this.isSpectatorMode = !!new URLSearchParams(window.location.search).get('room');
     this.setupEventListeners();
   }
 
@@ -18,6 +21,13 @@ export class HUDController {
   }
 
   private setupEventListeners(): void {
+    // Listen to connection state changes
+    eventBus.on('connection:state', (event: GameEvent) => {
+      const payload = event.payload as { state: string };
+      this.connectionState = payload.state;
+      this.updateConnectionBadge();
+    });
+
     // Listen to all events
     eventBus.on('*' as any, (event: GameEvent) => {
       this.logEvent(event);
@@ -45,7 +55,7 @@ export class HUDController {
       </div>
 
       <div class="center-hud">
-        <div class="live-badge">● LIVE</div>
+        <div class="connection-badge" id="connection-badge">${this.getConnectionBadgeHTML()}</div>
         <div class="countdown-timer" id="countdown-timer" style="display: none; margin-top: 8px; font-size: 16px; font-weight: bold; color: #333;"></div>
       </div>
 
@@ -141,6 +151,32 @@ export class HUDController {
     if (message) {
       this.eventLog.push(message);
       this.updateEventLog();
+    }
+  }
+
+  private getConnectionBadgeHTML(): string {
+    if (!this.isSpectatorMode) {
+      return '<span class="connection-dot local"></span>LOCAL';
+    }
+
+    switch (this.connectionState) {
+      case 'connected':
+        return '<span class="connection-dot connected"></span>LIVE · connected';
+      case 'connecting':
+        return '<span class="connection-dot connecting"></span>Connecting...';
+      case 'reconnecting':
+        return '<span class="connection-dot reconnecting"></span>Reconnecting...';
+      case 'disconnected':
+        return '<span class="connection-dot disconnected"></span>Disconnected';
+      default:
+        return '<span class="connection-dot"></span>Unknown';
+    }
+  }
+
+  private updateConnectionBadge(): void {
+    const badge = document.getElementById('connection-badge');
+    if (badge) {
+      badge.innerHTML = this.getConnectionBadgeHTML();
     }
   }
 

@@ -100,22 +100,60 @@ body {
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-.live-badge {
+.connection-badge {
   display: inline-block;
-  background: #e53935;
-  color: white;
+  background: rgba(255, 255, 255, 0.95);
+  color: #333;
   padding: 6px 12px;
+  border: 2px solid #333;
   border-radius: 4px;
   font-weight: bold;
   font-size: 14px;
-  letter-spacing: 1px;
-  box-shadow: 0 2px 8px rgba(229, 57, 53, 0.3);
-  animation: pulse 2s infinite;
+  letter-spacing: 0.5px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
 }
 
-@keyframes pulse {
+.connection-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+  vertical-align: middle;
+}
+
+.connection-dot.connected {
+  background: #4caf50;
+  box-shadow: 0 0 8px rgba(76, 175, 80, 0.6);
+  animation: pulse-green 2s infinite;
+}
+
+.connection-dot.connecting {
+  background: #ff9800;
+  animation: pulse-orange 1s infinite;
+}
+
+.connection-dot.reconnecting {
+  background: #ff9800;
+  animation: pulse-orange 0.8s infinite;
+}
+
+.connection-dot.disconnected {
+  background: #f44336;
+}
+
+.connection-dot.local {
+  background: #2196f3;
+}
+
+@keyframes pulse-green {
   0%, 100% { opacity: 1; }
-  50% { opacity: 0.7; }
+  50% { opacity: 0.6; }
+}
+
+@keyframes pulse-orange {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.4; }
 }
 
 .event-log {
@@ -151,7 +189,7 @@ body {
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .live-badge {
-    animation: none;
+  .connection-dot {
+    animation: none !important;
   }
 }
