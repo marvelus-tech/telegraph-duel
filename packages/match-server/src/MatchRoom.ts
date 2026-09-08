@@ -15,7 +15,6 @@ interface Env {
 export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
   private roundTimer: number | null = null;
-  private clashResolvedForRound: number | null = null;
   private env: Env;
 
   constructor(ctx: DurableObjectState, env: Env) {
@@ -589,15 +588,11 @@ export class MatchRoom extends DurableObject {
     setTimeout(() => this.startRound(), 2000);
   }
 
-  private getFinalStance(intentType: IntentType): IntentType {
-    return intentType;
-  }
-
   private extendRound(): void {
     if (!this.state) return;
 
     // Allow the extended window to resolve by clearing the flag
-    this.clashResolvedForRound = null;
+    this.state.clashResolvedForRound = null;
 
     this.state.roundExtended = true;
     this.saveState();
