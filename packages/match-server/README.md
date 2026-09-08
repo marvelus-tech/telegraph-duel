@@ -332,11 +332,11 @@ Server broadcasts game events matching the EventBus schema:
 
 - **Worker**: HTTP routing, CORS, room creation
 - **Durable Object (MatchRoom)**: Stateful per-room logic
-  - WebSocket session management
+  - WebSocket session management (hibernation-safe via `ctx.getWebSockets()`)
   - Timing windows
   - Intent validation
   - Clash resolution
-  - Event broadcasting
+  - Event broadcasting (broadcasts use `ctx.getWebSockets()` to reach hibernated connections)
 
 ## Deployment
 

@@ -14,7 +14,6 @@ interface Env {
 
 export class MatchRoom extends DurableObject {
   private state: RoomState | null = null;
-  private sessions: Set<WebSocket> = new Set();
   private roundTimer: number | null = null;
   private clashResolvedForRound: number | null = null;
   private env: Env;
@@ -120,27 +119,26 @@ export class MatchRoom extends DurableObject {
     const [client, server] = Object.values(pair);
 
     this.ctx.acceptWebSocket(server);
-    this.sessions.add(server);
-
-    server.addEventListener('message', (event) => {
-      try {
-        const data = JSON.parse(event.data as string);
-        if (data.action === 'submitIntent') {
-          this.handleIntentFromWS(data.payload);
-        }
-      } catch (e) {
-        console.error('WebSocket message error:', e);
-      }
-    });
-
-    server.addEventListener('close', () => {
-      this.sessions.delete(server);
-    });
 
     return new Response(null, {
       status: 101,
       webSocket: client,
     });
+  }
+
+  async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
+    try {
+      const data = JSON.parse(message as string);
+      if (data.action === 'submitIntent') {
+        await this.handleIntentFromWS(data.payload);
+      }
+    } catch (e) {
+      console.error('WebSocket message error:', e);
+    }
+  }
+
+  async webSocketClose(ws: WebSocket, code: number, reason: string, wasClean: boolean): Promise<void> {
+    // Cleanup if needed; hibernated sockets are managed by Cloudflare
   }
 
   private async handleGetRoom(): Promise<Response> {
@@ -712,7 +710,8 @@ export class MatchRoom extends DurableObject {
 
   private broadcast(event: GameEvent): void {
     const message = JSON.stringify(event);
-    this.sessions.forEach((ws) => {
+    const sockets = this.ctx.getWebSockets();
+    sockets.forEach((ws) => {
       try {
         ws.send(message);
       } catch (e) {
