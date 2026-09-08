@@ -1,10 +1,12 @@
 import { MatchRoom } from './MatchRoom';
+import { ScoreBoard } from './ScoreBoard';
 import type { CreateRoomRequest } from './types';
 
-export { MatchRoom };
+export { MatchRoom, ScoreBoard };
 
 interface Env {
   MATCH_ROOM: DurableObjectNamespace;
+  SCORE_BOARD: DurableObjectNamespace;
   BRIDGE_TOKEN?: string;
 }
 
@@ -39,6 +41,20 @@ export default {
     if (request.method === 'OPTIONS') {
       return new Response(null, {
         headers: corsHeaders(origin),
+      });
+    }
+
+    if (url.pathname === '/scores' && request.method === 'GET') {
+      const id = env.SCORE_BOARD.idFromName('arena');
+      const board = env.SCORE_BOARD.get(id);
+      const boardResponse = await board.fetch(new Request('https://board/scores'));
+      const newHeaders = new Headers(boardResponse.headers);
+      Object.entries(corsHeaders(origin)).forEach(([key, value]) => {
+        newHeaders.set(key, value);
+      });
+      return new Response(boardResponse.body, {
+        status: boardResponse.status,
+        headers: newHeaders,
       });
     }
 

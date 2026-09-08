@@ -10,6 +10,7 @@ const FEINT_WINDOW = 400;
 
 interface Env {
   BRIDGE_TOKEN?: string;
+  SCORE_BOARD?: DurableObjectNamespace;
 }
 
 export class MatchRoom extends DurableObject {
@@ -239,9 +240,26 @@ export class MatchRoom extends DurableObject {
       timestamp: Date.now(),
     });
 
+    await this.recordBoard(payload);
+
     return new Response(JSON.stringify({ ok: true }), {
       headers: { 'Content-Type': 'application/json' },
     });
+  }
+
+  private async recordBoard(payload: Record<string, unknown>): Promise<void> {
+    const ns = this.env.SCORE_BOARD;
+    if (!ns) return;
+    try {
+      const stub = ns.get(ns.idFromName('arena'));
+      await stub.fetch('https://board/bump', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+    } catch (e) {
+      console.error('ScoreBoard bump failed', e);
+    }
   }
 
   private async processIntent(intent: IntentRequest): Promise<Response> {

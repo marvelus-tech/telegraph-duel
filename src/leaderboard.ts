@@ -1,7 +1,8 @@
-import { loadScores, type ScoreRow } from './scores/scoreStore';
+import { loadScores, fetchRemoteScores, type ScoreRow } from './scores/scoreStore';
 import './style.css';
 
 const BASE = import.meta.env.BASE_URL;
+const DEFAULT_API = 'https://telegraph-duel-match-server.marvelus.workers.dev';
 
 function escapeHtml(value: string): string {
   return value
@@ -16,7 +17,6 @@ function short(value: string | undefined, n = 8): string {
   return value.length <= n + 3 ? value : `${value.slice(0, n)}…`;
 }
 
-/** Base58, 87–88 chars: typical Solana tx signature. */
 function looksLikeSolanaSig(value: string): boolean {
   return /^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(value);
 }
@@ -29,7 +29,6 @@ function lastTxCell(tx: string | undefined): string {
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
 }
 
-/** Arena keeps spectator room/api; drops view/mode/wallet. */
 function arenaHref(): string {
   const params = new URLSearchParams(window.location.search);
   const next = new URLSearchParams();
@@ -43,6 +42,10 @@ function arenaHref(): string {
 
 function walletFilter(): string {
   return new URLSearchParams(window.location.search).get('wallet')?.trim() ?? '';
+}
+
+function scoresApi(): string {
+  return new URLSearchParams(window.location.search).get('api')?.trim() || DEFAULT_API;
 }
 
 function matchesFilter(row: ScoreRow, q: string): boolean {
@@ -63,17 +66,16 @@ function rowHtml(row: ScoreRow, i: number): string {
   </tr>`;
 }
 
-function render(): void {
+function paint(allRows: ScoreRow[], source: string): void {
   const app = document.getElementById('app');
   if (!app) return;
   const filter = walletFilter();
-  const allRows = loadScores();
   const rows = allRows.filter((row) => matchesFilter(row, filter));
 
   let table: string;
   if (!allRows.length) {
     table = `<div class="empty-board">
-        <p>No settled matches on this device yet.</p>
+        <p>No settled matches yet.</p>
         <p>Watch a duel. When <strong>SETTLED</strong> lands, scores show here. No wallet required to spectate.</p>
       </div>`;
   } else if (!rows.length) {
@@ -101,7 +103,8 @@ function render(): void {
           <a class="nav-link" href="${BASE}?mode=sumo">Sumo</a>
         </nav>
         <h1>Arena scores</h1>
-        <p>Identity from settled score PDAs / last wallets. Stake-free. Spectating stays open.</p>
+        <p>Public stake-free board from SETTLED matches. Identity only. Spectating stays open.</p>
+        <p class="board-source">${escapeHtml(source)}</p>
         ${filterNote}
         ${table}
       </div>
@@ -109,4 +112,15 @@ function render(): void {
   `;
 }
 
-render();
+async function render(): Promise<void> {
+  paint(loadScores(), 'Loading public board…');
+  const remote = await fetchRemoteScores(scoresApi());
+  if (remote) {
+    paint(remote, 'Public Worker board');
+    return;
+  }
+  const local = loadScores();
+  paint(local, local.length ? 'This browser only (Worker unreachable)' : 'Public Worker board');
+}
+
+void render();

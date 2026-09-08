@@ -381,6 +381,13 @@ body {
   margin-bottom: 20px;
 }
 
+.board-source {
+  font-size: 12px;
+  font-weight: 600;
+  color: #777;
+  margin-top: -12px;
+}
+
 .board-nav {
   display: flex;
   gap: 12px;

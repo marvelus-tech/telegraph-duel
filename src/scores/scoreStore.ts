@@ -67,3 +67,15 @@ export function listenForSettlements(): void {
 export function loadScores(): ScoreRow[] {
   return readRows().sort((a, b) => b.wins - a.wins || b.matches - a.matches);
 }
+
+/** Public board from the match Worker. Null if the Worker is down. */
+export async function fetchRemoteScores(apiBase: string): Promise<ScoreRow[] | null> {
+  try {
+    const res = await fetch(`${apiBase.replace(/\/$/, '')}/scores`);
+    if (!res.ok) return null;
+    const body = (await res.json()) as { rows?: ScoreRow[] };
+    return Array.isArray(body.rows) ? body.rows : null;
+  } catch {
+    return null;
+  }
+}

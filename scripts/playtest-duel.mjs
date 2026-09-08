@@ -134,4 +134,11 @@ if (winnerSeat) {
 ws.close();
 console.log('history', (room.history || []).map((h) => `R${h.round} ${h.reason}`).join(' | '));
 console.log('final', room.scores, 'winner', winnerAgentId);
+try {
+  const board = await get('/scores');
+  console.log('board', (board.rows || []).map((r) => `${r.agentId} ${r.wins}-${r.losses}`).join(' | ') || '(empty)');
+} catch (e) {
+  console.error('board', e.message);
+}
 console.log('spectate', spectator);
+console.log('scores', `${PAGES.replace(/\/$/, '')}/leaderboard.html?api=${encodeURIComponent(API)}`);
