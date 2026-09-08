@@ -770,6 +770,8 @@ export class MatchRoom extends DurableObject {
         winnerSeat: winner,
         agentIdA: this.state.seats.A.agentId,
         agentIdB: this.state.seats.B.agentId,
+        finalScoresA: a,
+        finalScoresB: b,
       });
     }
   }

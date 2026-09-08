@@ -10,7 +10,23 @@ export interface ScoreRow {
   losses: number;
   matches: number;
   lastTx?: string;
+  lastRoom?: string;
   lastAt: number;
+}
+
+export interface RecentDuel {
+  roomId: string;
+  agentA: string;
+  agentB: string;
+  scoresA: number;
+  scoresB: number;
+  winner: string | null;
+  at: number;
+}
+
+export interface ScoreBoardPayload {
+  rows: ScoreRow[];
+  recent: RecentDuel[];
 }
 
 function readRows(): ScoreRow[] {
@@ -69,12 +85,13 @@ export function loadScores(): ScoreRow[] {
 }
 
 /** Public board from the match Worker. Null if the Worker is down. */
-export async function fetchRemoteScores(apiBase: string): Promise<ScoreRow[] | null> {
+export async function fetchRemoteScores(apiBase: string): Promise<ScoreBoardPayload | null> {
   try {
     const res = await fetch(`${apiBase.replace(/\/$/, '')}/scores`);
     if (!res.ok) return null;
-    const body = (await res.json()) as { rows?: ScoreRow[] };
-    return Array.isArray(body.rows) ? body.rows : null;
+    const body = (await res.json()) as { rows?: ScoreRow[]; recent?: RecentDuel[] };
+    if (!Array.isArray(body.rows)) return null;
+    return { rows: body.rows, recent: Array.isArray(body.recent) ? body.recent : [] };
   } catch {
     return null;
   }

@@ -1,4 +1,4 @@
-import { loadScores, fetchRemoteScores, type ScoreRow } from './scores/scoreStore';
+import { loadScores, fetchRemoteScores, type RecentDuel, type ScoreRow } from './scores/scoreStore';
 import './style.css';
 
 const BASE = import.meta.env.BASE_URL;
@@ -29,6 +29,22 @@ function lastTxCell(tx: string | undefined): string {
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
 }
 
+function scoresApi(): string {
+  return new URLSearchParams(window.location.search).get('api')?.trim() || DEFAULT_API;
+}
+
+function watchHref(roomId: string): string {
+  const q = new URLSearchParams();
+  q.set('room', roomId);
+  q.set('api', scoresApi());
+  return `${BASE}?${q.toString()}`;
+}
+
+function watchCell(roomId: string | undefined): string {
+  if (!roomId) return '-';
+  return `<a class="watch-link" href="${escapeHtml(watchHref(roomId))}">Watch</a>`;
+}
+
 function arenaHref(): string {
   const params = new URLSearchParams(window.location.search);
   const next = new URLSearchParams();
@@ -42,10 +58,6 @@ function arenaHref(): string {
 
 function walletFilter(): string {
   return new URLSearchParams(window.location.search).get('wallet')?.trim() ?? '';
-}
-
-function scoresApi(): string {
-  return new URLSearchParams(window.location.search).get('api')?.trim() || DEFAULT_API;
 }
 
 function matchesFilter(row: ScoreRow, q: string): boolean {
@@ -62,11 +74,24 @@ function rowHtml(row: ScoreRow, i: number): string {
     <td>${row.wins}</td>
     <td>${row.losses}</td>
     <td>${row.matches}</td>
+    <td>${watchCell(row.lastRoom)}</td>
     <td>${lastTxCell(row.lastTx)}</td>
   </tr>`;
 }
 
-function paint(allRows: ScoreRow[], source: string): void {
+function recentHtml(duel: RecentDuel): string {
+  const score = `${duel.scoresA}-${duel.scoresB}`;
+  return `<tr>
+    <td><a class="watch-link" href="${escapeHtml(watchHref(duel.roomId))}">${escapeHtml(short(duel.roomId, 10))}</a></td>
+    <td>${escapeHtml(duel.agentA)}</td>
+    <td>${escapeHtml(duel.agentB)}</td>
+    <td>${escapeHtml(score)}</td>
+    <td>${escapeHtml(duel.winner ?? 'draw')}</td>
+    <td>${watchCell(duel.roomId)}</td>
+  </tr>`;
+}
+
+function paint(allRows: ScoreRow[], recent: RecentDuel[], source: string): void {
   const app = document.getElementById('app');
   if (!app) return;
   const filter = walletFilter();
@@ -75,8 +100,8 @@ function paint(allRows: ScoreRow[], source: string): void {
   let table: string;
   if (!allRows.length) {
     table = `<div class="empty-board">
-        <p>No settled matches yet.</p>
-        <p>Watch a duel. When <strong>SETTLED</strong> lands, scores show here. No wallet required to spectate.</p>
+        <p>No completed matches yet.</p>
+        <p>Watch a duel. When the match ends, scores and a Watch link land here. No wallet required to spectate.</p>
       </div>`;
   } else if (!rows.length) {
     table = `<div class="empty-board">
@@ -85,9 +110,22 @@ function paint(allRows: ScoreRow[], source: string): void {
   } else {
     table = `<table class="score-table">
         <thead>
-          <tr><th>#</th><th>Agent</th><th>Wallet</th><th>W</th><th>L</th><th>Matches</th><th>Last tx</th></tr>
+          <tr><th>#</th><th>Agent</th><th>Wallet</th><th>W</th><th>L</th><th>Matches</th><th>Last room</th><th>Last tx</th></tr>
         </thead>
         <tbody>${rows.map(rowHtml).join('')}</tbody>
+      </table>`;
+  }
+
+  let recentBlock = '';
+  if (recent.length) {
+    recentBlock = `
+      <h2>Recent duels</h2>
+      <p>Replay a completed room. Late join gets the snapshot, not live juice.</p>
+      <table class="score-table">
+        <thead>
+          <tr><th>Room</th><th>Seat A</th><th>Seat B</th><th>Score</th><th>Winner</th><th></th></tr>
+        </thead>
+        <tbody>${recent.map(recentHtml).join('')}</tbody>
       </table>`;
   }
 
@@ -103,24 +141,25 @@ function paint(allRows: ScoreRow[], source: string): void {
           <a class="nav-link" href="${BASE}?mode=sumo">Sumo</a>
         </nav>
         <h1>Arena scores</h1>
-        <p>Public stake-free board from SETTLED matches. Identity only. Spectating stays open.</p>
+        <p>Public stake-free board from completed matches. Identity only. Spectating stays open.</p>
         <p class="board-source">${escapeHtml(source)}</p>
         ${filterNote}
         ${table}
+        ${recentBlock}
       </div>
     </div>
   `;
 }
 
 async function render(): Promise<void> {
-  paint(loadScores(), 'Loading public board…');
+  paint(loadScores(), [], 'Loading public board…');
   const remote = await fetchRemoteScores(scoresApi());
   if (remote) {
-    paint(remote, 'Public Worker board');
+    paint(remote.rows, remote.recent, 'Public Worker board');
     return;
   }
   const local = loadScores();
-  paint(local, local.length ? 'This browser only (Worker unreachable)' : 'Public Worker board');
+  paint(local, [], local.length ? 'This browser only (Worker unreachable)' : 'Public Worker board');
 }
 
 void render();

@@ -34,7 +34,7 @@ Register and click-test these. Vite `base` is `/telegraph-duel/`.
 |---------|-----|
 | Arena (local demo) | `/telegraph-duel/` |
 | Spectator | `/telegraph-duel/?room=<id>&api=<worker>` |
-| Scores | `/telegraph-duel/leaderboard.html` (also `?view=scores`) |
+| Scores | `/telegraph-duel/leaderboard.html` (also `?view=scores`). Watch links replay the last room. |
 | Sumo spike | `/telegraph-duel/?mode=sumo` |
 
 Arena ↔ Scores keep `?room=` / `?api=` / `?mode=`. No wallet wall on spectate.

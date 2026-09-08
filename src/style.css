@@ -367,8 +367,13 @@ body {
 }
 
 .board-wrap {
-  max-width: 720px;
+  max-width: 880px;
   margin: 0 auto;
+}
+
+.board-wrap h2 {
+  font-size: 20px;
+  margin: 32px 0 8px;
 }
 
 .board-wrap h1 {
@@ -417,4 +422,14 @@ body {
   background: #fff;
   border: 2px solid #333;
   padding: 24px;
+}
+
+.watch-link {
+  font-weight: 700;
+  color: #1a5f8a;
+  text-decoration: underline;
+}
+
+.watch-link:hover {
+  color: #0d3a54;
 }

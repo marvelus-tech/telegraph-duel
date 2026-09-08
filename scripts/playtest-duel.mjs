@@ -131,11 +131,21 @@ const replay = await new Promise((resolve, reject) => {
 });
 console.log('replay', replay.status, replay.scoresA, replay.scoresB, 'history', (replay.history || []).length);
 
+await sleep(400);
+
 console.log('history', (room.history || []).map((h) => `R${h.round} ${h.reason}`).join(' | '));
 console.log('final', room.scores, 'winner', winnerAgentId);
 try {
   const board = await get('/scores');
-  console.log('board', (board.rows || []).map((r) => `${r.agentId} ${r.wins}-${r.losses}`).join(' | ') || '(empty)');
+  console.log(
+    'board',
+    (board.rows || []).map((r) => `${r.agentId} ${r.wins}-${r.losses} room=${r.lastRoom || '-'}`).join(' | ') ||
+      '(empty)',
+  );
+  console.log(
+    'recent',
+    (board.recent || []).map((d) => `${d.roomId} ${d.agentA} ${d.scoresA}-${d.scoresB}`).join(' | ') || '(empty)',
+  );
 } catch (e) {
   console.error('board', e.message);
 }

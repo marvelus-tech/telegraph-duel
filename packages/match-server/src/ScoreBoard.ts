@@ -7,15 +7,33 @@ export interface ScoreRow {
   losses: number;
   matches: number;
   lastTx?: string;
+  lastRoom?: string;
   lastAt: number;
+}
+
+export interface RecentDuel {
+  roomId: string;
+  agentA: string;
+  agentB: string;
+  scoresA: number;
+  scoresB: number;
+  winner: string | null;
+  at: number;
 }
 
 interface BoardState {
   rows: ScoreRow[];
   seenTx: string[];
+  recent: RecentDuel[];
 }
 
-function bump(rows: ScoreRow[], agentId: string, wallet: string | undefined, win: boolean, tx?: string): ScoreRow[] {
+function bump(
+  rows: ScoreRow[],
+  agentId: string,
+  wallet: string | undefined,
+  win: boolean,
+  extra: { tx?: string; room?: string },
+): ScoreRow[] {
   const next = [...rows];
   let row = next.find((r) => r.agentId === agentId);
   if (!row) {
@@ -26,7 +44,8 @@ function bump(rows: ScoreRow[], agentId: string, wallet: string | undefined, win
   if (win) row.wins += 1;
   else row.losses += 1;
   if (wallet) row.wallet = wallet;
-  if (tx) row.lastTx = tx;
+  if (extra.tx) row.lastTx = extra.tx;
+  if (extra.room) row.lastRoom = extra.room;
   row.lastAt = Date.now();
   return next;
 }
@@ -35,7 +54,7 @@ export class ScoreBoard extends DurableObject {
   async fetch(request: Request): Promise<Response> {
     if (request.method === 'GET') {
       const state = await this.load();
-      return Response.json({ rows: state.rows });
+      return Response.json({ rows: state.rows, recent: state.recent || [] });
     }
     if (request.method === 'POST') {
       return this.handleBump(request);
@@ -44,9 +63,9 @@ export class ScoreBoard extends DurableObject {
   }
 
   private async load(): Promise<BoardState> {
-    return (
-      (await this.ctx.storage.get<BoardState>('board')) || { rows: [], seenTx: [] }
-    );
+    const stored = await this.ctx.storage.get<BoardState>('board');
+    if (!stored) return { rows: [], seenTx: [], recent: [] };
+    return { rows: stored.rows || [], seenTx: stored.seenTx || [], recent: stored.recent || [] };
   }
 
   private async handleBump(request: Request): Promise<Response> {
@@ -77,26 +96,51 @@ export class ScoreBoard extends DurableObject {
 
     // match:end already counted this room; Dex POST only attaches lastTx
     if (roomKey && state.seenTx.includes(roomKey)) {
-      if (tx) {
-        for (const id of [agentIdA, agentIdB]) {
-          const row = state.rows.find((r) => r.agentId === id);
-          if (row) row.lastTx = tx;
-        }
-        state.seenTx = [...state.seenTx, tx].slice(-200);
-        await this.ctx.storage.put('board', state);
+      const room = typeof payload.roomId === 'string' ? payload.roomId : '';
+      for (const id of [agentIdA, agentIdB]) {
+        const row = state.rows.find((r) => r.agentId === id);
+        if (!row) continue;
+        if (tx) row.lastTx = tx;
+        if (room && !row.lastRoom) row.lastRoom = room;
       }
+      if (tx) state.seenTx = [...state.seenTx, tx].slice(-200);
+      if (!state.recent) state.recent = [];
+      await this.ctx.storage.put('board', state);
       return Response.json({ ok: true, attachedTx: !!tx });
     }
 
-    let rows = bump(state.rows, agentIdA, payload.walletA as string | undefined, seat === 'A', tx || undefined);
-    rows = bump(rows, agentIdB, payload.walletB as string | undefined, seat === 'B', tx || undefined);
+    let rows = bump(state.rows, agentIdA, payload.walletA as string | undefined, seat === 'A', {
+      tx: tx || undefined,
+      room: payload.roomId as string | undefined,
+    });
+    rows = bump(rows, agentIdB, payload.walletB as string | undefined, seat === 'B', {
+      tx: tx || undefined,
+      room: payload.roomId as string | undefined,
+    });
     rows.sort((a, b) => b.wins - a.wins || b.matches - a.matches);
     if (rows.length > 100) rows = rows.slice(0, 100);
+
+    const recent = [...(state.recent || [])];
+    if (typeof payload.roomId === 'string' && payload.roomId) {
+      recent.unshift({
+        roomId: payload.roomId,
+        agentA: agentIdA,
+        agentB: agentIdB,
+        scoresA: Number(payload.finalScoresA ?? 0),
+        scoresB: Number(payload.finalScoresB ?? 0),
+        winner: seat === 'A' ? agentIdA : agentIdB,
+        at: Date.now(),
+      });
+    }
 
     const seenTx = [...state.seenTx];
     if (roomKey) seenTx.push(roomKey);
     if (tx) seenTx.push(tx);
-    await this.ctx.storage.put('board', { rows, seenTx: seenTx.slice(-200) });
+    await this.ctx.storage.put('board', {
+      rows,
+      seenTx: seenTx.slice(-200),
+      recent: recent.slice(0, 20),
+    });
     return Response.json({ ok: true });
   }
 }
