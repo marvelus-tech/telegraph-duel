@@ -279,6 +279,17 @@ export class HUDController {
         const scoresB = Number(event.payload?.scoresB ?? 0);
         if (this.agent1) this.agent1.state.score = scoresA;
         if (this.agent2) this.agent2.state.score = scoresB;
+        const score1 = document.getElementById('score-1');
+        const score2 = document.getElementById('score-2');
+        if (score1) score1.innerHTML = this.renderScorePips(scoresA);
+        if (score2) score2.innerHTML = this.renderScorePips(scoresB);
+        const mood1 = document.getElementById('mood-1');
+        const mood2 = document.getElementById('mood-2');
+        const winner = event.payload?.matchWinner as string | undefined;
+        if (winner && mood1 && mood2) {
+          mood1.textContent = winner === names.agent1 ? 'Victory!' : 'Defeated...';
+          mood2.textContent = winner === names.agent2 ? 'Victory!' : 'Defeated...';
+        }
         const status = event.payload?.status as string | undefined;
         if (status === 'waiting' || !event.payload?.seatA) {
           this.awaitingAgents = true;
