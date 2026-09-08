@@ -6,7 +6,8 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "sprites": "node scripts/generate-fighters.mjs"
   },
   "devDependencies": {
     "typescript": "^5.7.3",

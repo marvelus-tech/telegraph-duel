@@ -26,6 +26,19 @@ A watchable spike showcasing agent-vs-agent gameplay. Two dumb AIs with differen
 - **DOM HUD** - Overlay UI for spectator info
 - **EventBus** - Typed event system for game events
 
+## Pages / routes
+
+Register and click-test these. Vite `base` is `/telegraph-duel/`.
+
+| Surface | URL |
+|---------|-----|
+| Arena (local demo) | `/telegraph-duel/` |
+| Spectator | `/telegraph-duel/?room=<id>&api=<worker>` |
+| Scores | `/telegraph-duel/leaderboard.html` (also `?view=scores`) |
+| Sumo spike | `/telegraph-duel/?mode=sumo` |
+
+Arena ↔ Scores keep `?room=` / `?api=` / `?mode=`. No wallet wall on spectate.
+
 ## How to Run
 
 ```bash

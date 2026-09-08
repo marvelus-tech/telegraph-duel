@@ -226,6 +226,15 @@ export class MatchRoom extends DurableObject {
       });
     }
 
+    // Bridge may POST a typed envelope; WS clients get a flat payload.
+    if (
+      payload.type === 'score.settled' &&
+      payload.payload &&
+      typeof payload.payload === 'object'
+    ) {
+      payload = payload.payload as Record<string, unknown>;
+    }
+
     // Broadcast score.settled event to all WebSocket clients
     this.broadcast({
       type: 'score.settled',

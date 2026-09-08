@@ -11,6 +11,7 @@ export interface AgentState {
   hasCommitted: boolean;
   commitTime: number;
   didFeint: boolean;
+  feintTime: number;
 }
 
 export class Agent {
@@ -27,6 +28,7 @@ export class Agent {
       hasCommitted: false,
       commitTime: 0,
       didFeint: false,
+      feintTime: 0,
     };
   }
 
@@ -58,6 +60,7 @@ export class Agent {
     this.state.hasCommitted = false;
     this.state.commitTime = 0;
     this.state.didFeint = false;
+    this.state.feintTime = 0;
     this.state.mood = 'Ready';
   }
 

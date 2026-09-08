@@ -5,18 +5,31 @@
  * See EVENTBUS.md for complete documentation and payload shapes.
  */
 
+/** Canvas / atlas pose names. Graphics fallback uses the same set. */
+export type AgentPose =
+  | 'idle'
+  | 'windUp'
+  | 'feint'
+  | 'commit'
+  | 'clash'
+  | 'panic'
+  | 'win';
+
+export type SpectatorStatus = 'connecting' | 'live' | 'reconnecting' | 'lost';
+
 export type GameEventType =
-  | 'match:start'    // Match begins
-  | 'round:start'    // Round begins
-  | 'round:extend'   // Round window extended
-  | 'agent:windUp'   // Both agents charging
-  | 'agent:feint'    // Agent performs feint
-  | 'agent:commit'   // Agent commits attack
-  | 'agent:panic'    // Agent fails to commit (reserved)
-  | 'clash:resolve'  // Round winner determined
-  | 'round:end'      // Round completes
-  | 'match:end'      // Match completes
-  | 'score.settled'; // Dex score settlement on-chain
+  | 'match:start'       // Match begins
+  | 'round:start'       // Round begins
+  | 'round:extend'      // Round window extended
+  | 'agent:windUp'      // Both agents charging
+  | 'agent:feint'       // Agent performs feint
+  | 'agent:commit'      // Agent commits attack
+  | 'agent:panic'       // Agent fails to commit (reserved)
+  | 'clash:resolve'     // Round winner determined
+  | 'round:end'         // Round completes
+  | 'match:end'         // Match completes
+  | 'score.settled'     // Dex score settlement on-chain
+  | 'spectator:status'; // RoomClient WS connection truth
 
 export interface GameEvent {
   type: GameEventType;

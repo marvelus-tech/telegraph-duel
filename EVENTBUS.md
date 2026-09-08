@@ -31,12 +31,16 @@ All events include `timestamp` (number, ms since epoch).
 #### `match:start`
 Emitted when a new match begins (best-of-5).
 
+Local demo emits `agent1` / `agent2`. Worker emits `seatA` / `seatB`. Spectators **must accept both**.
+
 ```typescript
 {
   type: 'match:start',
   payload: {
-    agent1: string,  // Agent 1 name
-    agent2: string   // Agent 2 name
+    agent1?: string,  // Local demo: Agent 1 name
+    agent2?: string,  // Local demo: Agent 2 name
+    seatA?: string,   // Worker: seat A agentId
+    seatB?: string    // Worker: seat B agentId
   },
   timestamp: number
 }
@@ -151,14 +155,39 @@ Emitted when round clash is resolved and winner determined.
 {
   type: 'clash:resolve',
   payload: {
-    winner: string,      // Winning agent name
-    loser: string,       // Losing agent name
-    winnerScore: number, // Winner's new total score
-    loserScore: number   // Loser's total score
+    winner?: string,     // Winning agent name; omit / empty on draw
+    loser?: string,      // Losing agent name
+    winnerScore?: number,
+    loserScore?: number,
+    reason?: string      // Worker snake_case; canvas/HUD use clashReasonCopy()
   },
   timestamp: number
 }
 ```
+
+Human titles live in `src/game/clashCopy.ts`. Do not show raw snake_case on canvas.
+
+#### `spectator:status`
+Emitted by `RoomClient` only (never by Phaser local demo). HUD badge must follow this; never fake LIVE.
+
+```typescript
+{
+  type: 'spectator:status',
+  payload: {
+    status: 'connecting' | 'live' | 'reconnecting' | 'lost',
+    roomId: string
+  },
+  timestamp: number
+}
+```
+
+## Agent Poses
+
+Canvas and atlas frames share these names (no `triumph`):
+
+`idle` | `windUp` | `feint` | `commit` | `clash` | `panic` | `win`
+
+Feint **holds** until commit or clash. Do not snap back to windUp.
 
 ## Agent Mood States
 
