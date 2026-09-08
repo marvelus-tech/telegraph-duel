@@ -69,8 +69,23 @@ export class ScoreBoard extends DurableObject {
 
     const state = await this.load();
     const tx = typeof payload.txSig === 'string' ? payload.txSig : '';
+    const roomKey = typeof payload.roomId === 'string' && payload.roomId ? `room:${payload.roomId}` : '';
+
     if (tx && state.seenTx.includes(tx)) {
       return Response.json({ ok: true, deduped: true });
+    }
+
+    // match:end already counted this room; Dex POST only attaches lastTx
+    if (roomKey && state.seenTx.includes(roomKey)) {
+      if (tx) {
+        for (const id of [agentIdA, agentIdB]) {
+          const row = state.rows.find((r) => r.agentId === id);
+          if (row) row.lastTx = tx;
+        }
+        state.seenTx = [...state.seenTx, tx].slice(-200);
+        await this.ctx.storage.put('board', state);
+      }
+      return Response.json({ ok: true, attachedTx: !!tx });
     }
 
     let rows = bump(state.rows, agentIdA, payload.walletA as string | undefined, seat === 'A', tx || undefined);
@@ -78,8 +93,10 @@ export class ScoreBoard extends DurableObject {
     rows.sort((a, b) => b.wins - a.wins || b.matches - a.matches);
     if (rows.length > 100) rows = rows.slice(0, 100);
 
-    const seenTx = tx ? [...state.seenTx, tx].slice(-200) : state.seenTx;
-    await this.ctx.storage.put('board', { rows, seenTx });
+    const seenTx = [...state.seenTx];
+    if (roomKey) seenTx.push(roomKey);
+    if (tx) seenTx.push(tx);
+    await this.ctx.storage.put('board', { rows, seenTx: seenTx.slice(-200) });
     return Response.json({ ok: true });
   }
 }

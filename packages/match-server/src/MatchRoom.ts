@@ -119,11 +119,47 @@ export class MatchRoom extends DurableObject {
     const [client, server] = Object.values(pair);
 
     this.ctx.acceptWebSocket(server);
+    this.replayTo(server);
 
     return new Response(null, {
       status: 101,
       webSocket: client,
     });
+  }
+
+  /** Catch-up for late / reconnecting spectators. Rooms do not otherwise replay. */
+  private replayTo(ws: WebSocket): void {
+    if (!this.state) return;
+    const s = this.state;
+    const history = (s.history || []).map((h) => {
+      const isDraw = h.reason.startsWith('draw');
+      return {
+        round: h.round,
+        reason: h.reason,
+        winner: isDraw ? null : s.seats[h.winner]?.agentId ?? null,
+      };
+    });
+    const winnerSeat = s.scores.A === s.scores.B ? null : s.scores.A > s.scores.B ? 'A' : 'B';
+    const event = {
+      type: 'room:snapshot',
+      payload: {
+        roomId: s.roomId,
+        status: s.status,
+        seatA: s.seats.A?.agentId,
+        seatB: s.seats.B?.agentId,
+        scoresA: s.scores.A,
+        scoresB: s.scores.B,
+        currentRound: s.currentRound,
+        history,
+        matchWinner: winnerSeat && s.status === 'completed' ? s.seats[winnerSeat]?.agentId : null,
+      },
+      timestamp: Date.now(),
+    };
+    try {
+      ws.send(JSON.stringify(event));
+    } catch (e) {
+      console.error('Replay send failed', e);
+    }
   }
 
   async webSocketMessage(ws: WebSocket, message: string | ArrayBuffer): Promise<void> {
@@ -727,6 +763,15 @@ export class MatchRoom extends DurableObject {
 
     this.state.status = 'completed';
     this.saveState();
+
+    if (winner && this.state.seats.A && this.state.seats.B) {
+      void this.recordBoard({
+        roomId: this.state.roomId,
+        winnerSeat: winner,
+        agentIdA: this.state.seats.A.agentId,
+        agentIdB: this.state.seats.B.agentId,
+      });
+    }
   }
 
   private broadcast(event: GameEvent): void {

@@ -49,9 +49,9 @@ const roomId = created.roomId;
 const spectator = `${PAGES}/?room=${encodeURIComponent(roomId)}&api=${encodeURIComponent(API)}`;
 console.log('room', roomId);
 console.log('spectate', spectator);
-console.log('Connect that URL first. Seats join in 8s.');
+console.log('Connect that URL anytime. Replay lands on watch connect.');
 
-await sleep(8000);
+await sleep(1500);
 
 const wsUrl = API.replace(/^http/, 'ws') + `/rooms/${roomId}/watch`;
 let matchEnd = null;
@@ -108,30 +108,29 @@ if (!matchEnd) throw new Error('match did not end in 90s');
 const room = await get(`/rooms/${roomId}`);
 const winnerSeat = room.scores.A === room.scores.B ? null : room.scores.A > room.scores.B ? 'A' : 'B';
 const winnerAgentId = winnerSeat === 'A' ? AGENT_A : winnerSeat === 'B' ? AGENT_B : AGENT_A;
-const txSig = `${roomId.replace(/[^1-9A-HJ-NP-Za-km-z]/g, 'x')}Playtestxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx`
-  .replace(/0/g, 'x')
-  .slice(0, 88);
-
-if (winnerSeat) {
-  await post(`/rooms/${roomId}/score-settled`, {
-    roomId,
-    matchId: roomId,
-    winnerAgentId,
-    winnerSeat,
-    finalScoresA: room.scores.A,
-    finalScoresB: room.scores.B,
-    agentIdA: AGENT_A,
-    agentIdB: AGENT_B,
-    walletA: 'VisorPlay111111111111111111111111111111111',
-    walletB: 'ShellPlay111111111111111111111111111111111',
-    scorePdaA: 'PdaA111111111111111111111111111111111111111',
-    scorePdaB: 'PdaB111111111111111111111111111111111111111',
-    txSig,
-    lastClashReason: room.lastClash?.reason,
-  });
-}
 
 ws.close();
+
+const replay = await new Promise((resolve, reject) => {
+  const late = new WebSocket(wsUrl);
+  const timer = setTimeout(() => {
+    late.close();
+    reject(new Error('replay timeout'));
+  }, 5000);
+  late.addEventListener('message', (ev) => {
+    const msg = JSON.parse(String(ev.data));
+    if (msg.type !== 'room:snapshot') return;
+    clearTimeout(timer);
+    late.close();
+    resolve(msg.payload);
+  });
+  late.addEventListener('error', () => {
+    clearTimeout(timer);
+    reject(new Error('replay ws failed'));
+  });
+});
+console.log('replay', replay.status, replay.scoresA, replay.scoresB, 'history', (replay.history || []).length);
+
 console.log('history', (room.history || []).map((h) => `R${h.round} ${h.reason}`).join(' | '));
 console.log('final', room.scores, 'winner', winnerAgentId);
 try {

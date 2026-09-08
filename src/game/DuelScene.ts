@@ -497,6 +497,34 @@ export class DuelScene extends Phaser.Scene {
       this.setPose(2, 'idle');
     });
 
+    eventBus.on('room:snapshot', (event) => {
+      const payload = event.payload as {
+        seatA?: string;
+        seatB?: string;
+        scoresA?: number;
+        scoresB?: number;
+        status?: string;
+        matchWinner?: string | null;
+      };
+      const names = matchStartNames({ seatA: payload.seatA, seatB: payload.seatB });
+      this.agent1.state.name = names.agent1;
+      this.agent2.state.name = names.agent2;
+      this.agent1.state.score = Number(payload.scoresA ?? 0);
+      this.agent2.state.score = Number(payload.scoresB ?? 0);
+      this.matchActive = payload.status === 'in_progress';
+      this.roundActive = payload.status === 'in_progress';
+      if (payload.matchWinner) {
+        const winSeat: 1 | 2 = payload.matchWinner === this.agent1.state.name ? 1 : 2;
+        this.setPose(winSeat, 'win');
+        this.setPose(winSeat === 1 ? 2 : 1, 'panic');
+        this.agent1.updateMood(winSeat === 1 ? 'Victory!' : 'Defeated...');
+        this.agent2.updateMood(winSeat === 2 ? 'Victory!' : 'Defeated...');
+      } else {
+        this.setPose(1, 'idle');
+        this.setPose(2, 'idle');
+      }
+    });
+
     eventBus.on('round:start', (event) => {
       const payload = event.payload as { round: number };
       this.currentRound = payload.round;

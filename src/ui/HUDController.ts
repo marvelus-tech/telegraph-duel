@@ -266,6 +266,41 @@ export class HUDController {
         if (roomEl && roomId) roomEl.textContent = `room ${roomId}`;
         return;
       }
+      case 'room:snapshot': {
+        const names = spectatorDisplayNames(event.payload);
+        const n1 = document.getElementById('name-1');
+        const n2 = document.getElementById('name-2');
+        if (event.payload?.seatA) {
+          if (n1) n1.textContent = names.agent1;
+          if (n2) n2.textContent = names.agent2;
+          this.hasMatchNames = true;
+        }
+        const scoresA = Number(event.payload?.scoresA ?? 0);
+        const scoresB = Number(event.payload?.scoresB ?? 0);
+        if (this.agent1) this.agent1.state.score = scoresA;
+        if (this.agent2) this.agent2.state.score = scoresB;
+        const status = event.payload?.status as string | undefined;
+        if (status === 'waiting' || !event.payload?.seatA) {
+          this.awaitingAgents = true;
+          this.showWaiting(false);
+        } else {
+          this.awaitingAgents = status === 'completed';
+          this.hideWaiting();
+          if (status === 'completed') this.showWaiting(true);
+        }
+        const history = (event.payload?.history as { round?: number; winner?: string | null; reason?: string }[]) || [];
+        for (const h of history) {
+          const reason = clashReasonCopy(h.reason);
+          const line = h.winner ? `<strong>${h.winner}</strong> - ${reason}` : reason;
+          this.eventLog.push(`<span class="timestamp">${time}</span> R${h.round} ${line}`);
+        }
+        if (status === 'completed') {
+          const winner = event.payload?.matchWinner as string | undefined;
+          this.setClashTitle(`${winner || 'Draw'} takes it ${scoresA}-${scoresB}`, 2500);
+        }
+        this.updateEventLog();
+        return;
+      }
       case 'match:start': {
         const names = this.spectatorMode
           ? spectatorDisplayNames(event.payload)

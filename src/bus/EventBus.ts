@@ -29,6 +29,7 @@ export type GameEventType =
   | 'round:end'         // Round completes
   | 'match:end'         // Match completes
   | 'score.settled'     // Dex score settlement on-chain
+  | 'room:snapshot'     // Watch-connect catch-up (late spectators)
   | 'spectator:status'; // RoomClient WS connection truth
 
 export interface GameEvent {
