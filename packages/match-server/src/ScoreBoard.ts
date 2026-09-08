@@ -21,6 +21,10 @@ export interface RecentDuel {
   at: number;
 }
 
+function looksLikeSolanaSig(value: string): boolean {
+  return /^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(value);
+}
+
 interface BoardState {
   rows: ScoreRow[];
   seenTx: string[];
@@ -87,7 +91,8 @@ export class ScoreBoard extends DurableObject {
     }
 
     const state = await this.load();
-    const tx = typeof payload.txSig === 'string' ? payload.txSig : '';
+    const txRaw = typeof payload.txSig === 'string' ? payload.txSig : '';
+    const tx = looksLikeSolanaSig(txRaw) ? txRaw : '';
     const roomKey = typeof payload.roomId === 'string' && payload.roomId ? `room:${payload.roomId}` : '';
 
     if (tx && state.seenTx.includes(tx)) {

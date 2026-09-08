@@ -46,6 +46,13 @@ export interface RoomState {
   };
   lastClash?: ClashResult;
   history: ClashResult[];
+  lastSettlement?: {
+    txSig?: string;
+    finalScoresA: number;
+    finalScoresB: number;
+    walletA?: string;
+    walletB?: string;
+  };
 }
 
 export interface CreateRoomRequest {

@@ -111,7 +111,7 @@ export class HUDController {
         <div class="countdown-timer" id="countdown-timer"></div>
         <div class="clash-title" id="clash-title"></div>
         <div class="settled-banner" id="settled-banner" role="status">
-          <span class="settled-kicker">SETTLED</span>
+          <span class="settled-kicker" id="settled-kicker">FINAL</span>
           <span class="settled-score" id="settled-score"></span>
           <span class="settled-tx" id="settled-tx"></span>
         </div>
@@ -225,14 +225,15 @@ export class HUDController {
     document.getElementById('call-chip')?.classList.remove('is-hidden');
   }
 
-  private showSettled(a: number, b: number, txSig?: string | null): void {
+  private showResultBanner(a: number, b: number, txSig?: string | null): void {
     const copy = settledBannerCopy(a, b, txSig);
-    const banner = document.getElementById('settled-banner');
+    const kickerEl = document.getElementById('settled-kicker');
     const scoreEl = document.getElementById('settled-score');
     const txEl = document.getElementById('settled-tx');
+    if (kickerEl) kickerEl.textContent = copy.kicker;
     if (scoreEl) scoreEl.textContent = copy.score;
     if (txEl) txEl.textContent = copy.tx;
-    banner?.classList.add('is-visible');
+    document.getElementById('settled-banner')?.classList.add('is-visible');
   }
 
   private hideSettled(): void {
@@ -297,7 +298,6 @@ export class HUDController {
         } else {
           this.awaitingAgents = status === 'completed';
           this.hideWaiting();
-          if (status === 'completed') this.showWaiting(true);
         }
         const history = (event.payload?.history as { round?: number; winner?: string | null; reason?: string }[]) || [];
         for (const h of history) {
@@ -308,6 +308,14 @@ export class HUDController {
         if (status === 'completed') {
           const winner = event.payload?.matchWinner as string | undefined;
           this.setClashTitle(`${winner || 'Draw'} takes it ${scoresA}-${scoresB}`, 2500);
+          const last = event.payload?.lastSettlement as
+            | { txSig?: string; finalScoresA?: number; finalScoresB?: number }
+            | undefined;
+          const a = Number(last?.finalScoresA ?? scoresA);
+          const b = Number(last?.finalScoresB ?? scoresB);
+          this.showResultBanner(a, b, last?.txSig);
+          const copy = settledBannerCopy(a, b, last?.txSig);
+          this.eventLog.push(`<span class="timestamp">${time}</span> ${copy.log}`);
         }
         this.updateEventLog();
         return;
@@ -383,11 +391,10 @@ export class HUDController {
         const winner = event.payload?.winner as string | undefined;
         this.setClashTitle(`${winner} takes it ${a}-${b}`, 2500);
         document.getElementById('call-chip')?.classList.add('is-hidden');
+        this.showResultBanner(a as number, b as number);
+        this.hideWaiting();
+        if (this.spectatorMode) this.awaitingAgents = true;
         message = `<span class="timestamp">${time}</span> Match: <strong>${winner}</strong> ${a}-${b}`;
-        if (this.spectatorMode) {
-          this.awaitingAgents = true;
-          this.showWaiting(true);
-        }
         break;
       }
       case 'score.settled': {
@@ -395,8 +402,15 @@ export class HUDController {
         const b = event.payload?.finalScoresB ?? 0;
         const txSig = event.payload?.txSig as string | undefined;
         const copy = settledBannerCopy(a as number, b as number, txSig);
-        this.showSettled(a as number, b as number, txSig);
-        if (this.spectatorMode && this.awaitingAgents) this.showWaiting(true);
+        this.hideWaiting();
+        if (copy.kicker !== 'SETTLED') {
+          const banner = document.getElementById('settled-banner');
+          if (!banner?.classList.contains('is-visible')) {
+            this.showResultBanner(a as number, b as number);
+          }
+          return;
+        }
+        this.showResultBanner(a as number, b as number, txSig);
         message = `<span class="timestamp">${time}</span> ${copy.log}`;
         break;
       }

@@ -130,6 +130,7 @@ const replay = await new Promise((resolve, reject) => {
   });
 });
 console.log('replay', replay.status, replay.scoresA, replay.scoresB, 'history', (replay.history || []).length);
+console.log('lastSettlement', replay.lastSettlement ?? null);
 
 await sleep(400);
 

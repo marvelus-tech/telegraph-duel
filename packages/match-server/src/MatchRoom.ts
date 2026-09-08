@@ -152,6 +152,7 @@ export class MatchRoom extends DurableObject {
         currentRound: s.currentRound,
         history,
         matchWinner: winnerSeat && s.status === 'completed' ? s.seats[winnerSeat]?.agentId : null,
+        lastSettlement: s.lastSettlement ?? null,
       },
       timestamp: Date.now(),
     };
@@ -275,6 +276,17 @@ export class MatchRoom extends DurableObject {
       payload,
       timestamp: Date.now(),
     });
+
+    if (this.state) {
+      this.state.lastSettlement = {
+        txSig: typeof payload.txSig === 'string' ? payload.txSig : undefined,
+        finalScoresA: Number(payload.finalScoresA ?? this.state.scores.A),
+        finalScoresB: Number(payload.finalScoresB ?? this.state.scores.B),
+        walletA: typeof payload.walletA === 'string' ? payload.walletA : undefined,
+        walletB: typeof payload.walletB === 'string' ? payload.walletB : undefined,
+      };
+      await this.saveState();
+    }
 
     await this.recordBoard(payload);
 

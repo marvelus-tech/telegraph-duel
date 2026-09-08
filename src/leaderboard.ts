@@ -1,4 +1,5 @@
 import { loadScores, fetchRemoteScores, type RecentDuel, type ScoreRow } from './scores/scoreStore';
+import { looksLikeSolanaSig } from './game/clashCopy';
 import './style.css';
 
 const BASE = import.meta.env.BASE_URL;
@@ -17,14 +18,9 @@ function short(value: string | undefined, n = 8): string {
   return value.length <= n + 3 ? value : `${value.slice(0, n)}…`;
 }
 
-function looksLikeSolanaSig(value: string): boolean {
-  return /^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(value);
-}
-
 function lastTxCell(tx: string | undefined): string {
-  if (!tx) return '-';
+  if (!tx || !looksLikeSolanaSig(tx)) return '-';
   const label = escapeHtml(short(tx));
-  if (!looksLikeSolanaSig(tx)) return label;
   const href = `https://solscan.io/tx/${encodeURIComponent(tx)}?cluster=devnet`;
   return `<a href="${href}" target="_blank" rel="noopener noreferrer">${label}</a>`;
 }

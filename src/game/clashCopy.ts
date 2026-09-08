@@ -58,17 +58,27 @@ export function waitingOverlayCopy(ended: boolean, roomId: string | null): { tit
   };
 }
 
+export type BannerKicker = 'FINAL' | 'SETTLED';
+
+/** Base58 Solana tx signatures are 87-88 chars. Fake playtest strings fail this. */
+export function looksLikeSolanaSig(value: string | undefined | null): boolean {
+  return typeof value === 'string' && /^[1-9A-HJ-NP-Za-km-z]{87,88}$/.test(value);
+}
+
 export function settledBannerCopy(
   a: number,
   b: number,
   txSig?: string | null,
-): { score: string; tx: string; log: string } {
+): { kicker: BannerKicker; score: string; tx: string; log: string } {
   const score = `${a}-${b}`;
-  const short = txSig?.slice(0, 8) ?? '';
+  const real = looksLikeSolanaSig(txSig);
+  const short = real && txSig ? txSig.slice(0, 8) : '';
   const tx = short ? `tx ${short}` : '';
+  const kicker: BannerKicker = real ? 'SETTLED' : 'FINAL';
   return {
+    kicker,
     score,
     tx,
-    log: tx ? `SETTLED ${score} · ${short}` : `SETTLED ${score}`,
+    log: tx ? `${kicker} ${score} · ${short}` : `${kicker} ${score}`,
   };
 }
