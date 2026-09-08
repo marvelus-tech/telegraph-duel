@@ -310,6 +310,14 @@ export class HUDController {
         break;
       case 'clash:resolve': {
         this.noteMatchActivity();
+        if (this.spectatorMode && event.payload?.seatA) {
+          const names = spectatorDisplayNames(event.payload);
+          const n1 = document.getElementById('name-1');
+          const n2 = document.getElementById('name-2');
+          if (n1) n1.textContent = names.agent1;
+          if (n2) n2.textContent = names.agent2;
+          this.hasMatchNames = true;
+        }
         const reason = clashReasonCopy(event.payload?.reason as string);
         this.setClashTitle(reason, 1400);
         if (this.agent1 && this.agent2) {
@@ -327,7 +335,7 @@ export class HUDController {
         const a = event.payload?.finalScoresA ?? 0;
         const b = event.payload?.finalScoresB ?? 0;
         const winner = event.payload?.winner as string | undefined;
-        this.setClashTitle(`${winner} takes it ${a}–${b}`, 2500);
+        this.setClashTitle(`${winner} takes it ${a}-${b}`, 2500);
         document.getElementById('call-chip')?.classList.add('is-hidden');
         message = `<span class="timestamp">${time}</span> Match: <strong>${winner}</strong> ${a}-${b}`;
         if (this.spectatorMode) {

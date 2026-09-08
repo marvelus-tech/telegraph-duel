@@ -544,7 +544,12 @@ export class DuelScene extends Phaser.Scene {
         loserScore?: number;
         reason?: string;
         outcome?: string;
+        seatA?: string;
+        seatB?: string;
       };
+
+      if (payload.seatA) this.agent1.state.name = payload.seatA;
+      if (payload.seatB) this.agent2.state.name = payload.seatB;
 
       this.cameras.main.shake(100, 0.002);
       this.setPose(1, 'clash');

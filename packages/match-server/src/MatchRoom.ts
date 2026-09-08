@@ -279,6 +279,16 @@ export class MatchRoom extends DurableObject {
 
     await this.saveState();
 
+    this.broadcast({
+      type: `agent:${intent.type}`,
+      payload: {
+        agent: intent.agentId,
+        seat,
+        round: intent.round,
+      },
+      timestamp: Date.now(),
+    });
+
     if (
       this.state.intents.A &&
       this.state.intents.B &&
@@ -290,16 +300,6 @@ export class MatchRoom extends DurableObject {
       }
       this.resolveClash();
     }
-
-    this.broadcast({
-      type: `agent:${intent.type}`,
-      payload: {
-        agent: intent.agentId,
-        seat,
-        round: intent.round,
-      },
-      timestamp: Date.now(),
-    });
 
     const response: Record<string, unknown> = {
       accepted: true,
@@ -685,16 +685,24 @@ export class MatchRoom extends DurableObject {
       this.roundTimer = null;
     }
 
-    const winner = this.state.scores.A >= this.state.config.firstTo ? 'A' : 'B';
-    const loser = winner === 'A' ? 'B' : 'A';
+    const a = this.state.scores.A;
+    const b = this.state.scores.B;
+    const firstTo = this.state.config.firstTo;
+    const winner: Seat | null = a > b ? 'A' : b > a ? 'B' : null;
+    const reason =
+      winner === null
+        ? 'draw_best_of_complete'
+        : a >= firstTo || b >= firstTo
+          ? `first_to_${firstTo}_complete`
+          : 'best_of_complete';
 
     this.broadcast({
       type: 'match:end',
       payload: {
-        winner: this.state.seats[winner]?.agentId,
-        finalScoresA: this.state.scores.A,
-        finalScoresB: this.state.scores.B,
-        reason: `first_to_${this.state.config.firstTo}_complete`,
+        winner: winner ? this.state.seats[winner]?.agentId : null,
+        finalScoresA: a,
+        finalScoresB: b,
+        reason,
       },
       timestamp: Date.now(),
     });
